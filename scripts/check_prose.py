@@ -55,14 +55,14 @@ def count_chars(text: str) -> int:
 
 
 def coverage(quotes: list[dict], body: str, min_ratio: float = 0.8) -> tuple[float, list[dict]]:
-    if not quotes:
+    # 标点型引语（「……」「？」）没有可核对的内容，不进分母
+    content = [(q, normalize(q.get("text", ""))) for q in quotes]
+    content = [(q, norm) for q, norm in content if norm]
+    if not content:
         return 1.0, []
     body_norm = normalize(body)
     missing, hits = [], 0
-    for quote in quotes:
-        q = normalize(quote.get("text", ""))
-        if not q:
-            continue
+    for quote, q in content:
         if q in body_norm:
             hits += 1
             continue
@@ -73,7 +73,7 @@ def coverage(quotes: list[dict], body: str, min_ratio: float = 0.8) -> tuple[flo
         else:
             missing.append({"page": quote.get("page"), "speaker": quote.get("speaker"),
                             "text": quote.get("text")})
-    return round(hits / len(quotes), 3), missing
+    return round(hits / len(content), 3), missing
 
 
 def load_bible_names(path: str | None) -> set[str]:
