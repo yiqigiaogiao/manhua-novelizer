@@ -101,6 +101,27 @@ ollama pull qwen2.5vl:7b     # 或 minicpm-v
 - `prompts/01b-page-script-from-ocr.md`：纯文本转录提示词，配合 T0/T1 使用。
 - `prompts/01-page-script.md`：T2/T3 的视觉转录提示词（原路径不变）。
 
+## 八、实测记录（2026-10-19 希德尼娅第 2 卷，8 个并行 agent）
+
+**最贵的错误：agent 自己裁图放大重读。**
+
+第 2 卷开跑时，4 个 agent 遇到竖排小字读不清，开始自己写 `_crop.py` 裁图：
+一页裁成 3–5 块，每块单独 read_image。`_crops/` 到 `_crops5/` 铺满目录，
+23 页的段落跑了 70 分钟还没落盘。
+
+**根因不是模型，是提示词有歧义**：原提示词只说"看不清用 `?` 占位"，
+没说"不许重读"。于是 agent 把 `?` 当成必须解决的问题，而不是可接受的交付。
+
+**修法**（已写进 `prompts/01-page-script.md` 第 5、10 条）：
+
+```
+一页只读一次；不许裁图、不许放大局部、不许重读。
+看不清就记 ?，不要试图解决它。
+```
+
+**教训**：并行 agent 的数量是显性成本，"每个 agent 多走几步"是隐性成本。
+后者不看账单发现不了——只能靠产物落盘速度判断。23 页一段 **超过 20 分钟没落盘就该怀疑**。
+
 > 实测记录（本机 Python 3.13）：
 > 1. `pip install rapidocr-onnxruntime` 下载超时（14.9MB 只到 3.4MB）；
 > 2. 重试装上了，但 `import rapidocr_onnxruntime` 直接触发 access violation（0xC0000005）——
