@@ -179,8 +179,12 @@ def write_tables(items: list[dict], out_dir: str) -> None:
 
 
 def run(work: str, out: str, title: str = "漫画小说化",
-        formats: list[str] | None = None, cover: bool = True) -> dict:
+        formats: list[str] | None = None, cover: bool = True,
+        only: list[str] | None = None) -> dict:
     items = collect(work)
+    if only:
+        wanted = {str(x).strip() for x in only}
+        items = [it for it in items if str(it["meta"].get("话", it["key"])).strip() in wanted]
     if not items:
         return {"error": f"no draft.md under {work}"}
     formats = formats or ["md", "docx", "epub", "mobi"]
@@ -225,7 +229,10 @@ if __name__ == "__main__":
     ap.add_argument("--title", default="漫画小说化")
     ap.add_argument("--formats", nargs="*", default=["md", "docx", "epub", "mobi"])
     ap.add_argument("--no-cover", action="store_true")
+    ap.add_argument("--chapters", nargs="*", default=None,
+                    help="只导出指定话，例如 --chapters 1 2 3")
     args = ap.parse_args()
-    print(json.dumps(run(args.work, args.out, args.title, args.formats, not args.no_cover),
+    print(json.dumps(run(args.work, args.out, args.title, args.formats,
+                         not args.no_cover, args.chapters),
                      ensure_ascii=False, indent=1))
     sys.exit(0)

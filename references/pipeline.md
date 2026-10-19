@@ -64,6 +64,9 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 4. 高/宽 > `--tile-ratio`（默认 2.6）视为长条页：按 1.55:1 切横带，相邻带重叠 12%。
 5. 命名必须稳定：页码 4 位补零，`p0007.jpg` / `p0007_t3.jpg`。
 6. 只想处理合本里的一段：`--first-page 120 --last-page 180`（1 起、含端点）。输出沿用**原书页号**（`p0120.jpg`），便于回溯。
+7. **图片目录**：`--images 目录` 直接读 jpg/png/webp，按文件名自然排序后同样放大、切片、编号。
+8. **双页扫描**：`--split-spread` 把宽高比 > 1.15 的图拆成左右两半；`--direction rtl` 时右半先读（日漫台版常见），`ltr` 时左半先读。
+   拆完再跑 `detect_order.py`，方向判定会准得多——整张跨页直接检测很容易误判为 ltr。
 
 **为什么要切片**：视觉模型会把整图缩到长边约 1500 px，一张 900×14000 的长条缩完每格只剩几十像素，字全糊。切片后每片接近 1:1.5，字才够大。
 
@@ -87,6 +90,10 @@ python scripts/detect_order.py --set rtl --work work                    # 人工
 
 置信度 < 0.6 时不要直接采信；人工确认流程见 `prompts/08-reading-order.md`。
 结果写入 `config.json` 的 `work.reading_direction`，S3 转录按它排 `order`。
+
+**跨页扫描必须在检测前拆开**。实测一本日漫台版：整张跨页送检得到 `ltr 0.51`（错），
+用 `--split-spread --direction rtl` 拆成 182 个半页后再检测得到 `rtl 0.68`（对）。
+拆页顺序与检测结论要一致，否则 S3 会把整页台词归属排反。
 
 ---
 

@@ -36,7 +36,7 @@ python scripts/build_manifest.py --help
 |---|---|---|---|
 | S0 | 建清单：解析文件名、上/中/下去重、剔非正文 | `python scripts/build_manifest.py --dir pdf` | `manifest.csv` |
 | S0b | 合本拆章：按书签或页表切分 | `python scripts/split_book.py --pdf book.pdf --out chapters` | `chNNN_*.pdf` |
-| S1 | 拆页：原生图抽取、长条切片、低清放大、jpg/png | `python scripts/prep_pages.py --pdf x.pdf --out ch001/pages` | `pages/p0001.jpg` |
+| S1 | 拆页：原生图抽取、长条切片、低清放大、jpg/png；也支持图片目录与**双页扫描拆分** | `python scripts/prep_pages.py --pdf x.pdf --out ch001/pages`<br>`python scripts/prep_pages.py --images 卷目录 --out ch001/pages --split-spread --direction rtl` | `pages/p0001.jpg` |
 | S1.5 | **阅读顺序**：左起 / 右起 / 条漫，可人工覆盖 | `python scripts/detect_order.py --pages ch001/pages` | 写入 `config.json` |
 | **S-1** | **叙事风格配置**（八维度，需用户确认） | agent + `prompts/00-style-analysis.md` | `style.json` `style.md` |
 | S2 | 圣经：人物/势力/术法/地名/方言 | agent + `prompts/05-bible.md` | `bible.md` |

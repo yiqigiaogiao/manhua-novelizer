@@ -127,9 +127,98 @@ def cleanup(work_dir: str, dry_run: bool = False, keep: str | None = None) -> di
             "kept": kept, "dry_run": dry_run}
 
 
+def process_images(src_dir: str, out_dir: str, min_width: int = 1100,
+                   tile_ratio: float = 2.6, overlap: float = 0.12,
+                   quality: int = 92, limit: int | None = None,
+                   force: bool = False, fmt: str = "jpg",
+                   split_spread: bool = False, direction: str = "ltr") -> dict:
+    """图片目录 → 规范化页图（按文件名自然排序）。
+
+    split_spread: 把横长的双页扫描拆成左右两半。
+    direction:    rtl 时右半页先读，ltr 时左半页先读。
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    manifest_path = os.path.join(out_dir, "pages.json")
+    if os.path.exists(manifest_path) and not force:
+        with open(manifest_path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+        if existing.get("source") == os.path.abspath(src_dir):
+            return existing
+
+    import re
+
+    def natural(name: str):
+        return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
+
+    files = [f for f in os.listdir(src_dir)
+             if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+    files.sort(key=natural)
+    if limit:
+        files = files[:limit]
+
+    ext = ".png" if fmt == "png" else ".jpg"
+    manifest = {"source": os.path.abspath(src_dir), "mode": "images", "format": fmt,
+                "split_spread": split_spread, "direction": direction, "pages": []}
+    counter = 0
+
+    def emit(img, source, half, page_no):
+        nonlocal counter
+        counter += 1
+        width, height = img.size
+        mode = "native"
+        if width < min_width:
+            scale = min_width / width
+            img = img.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
+            mode = "upscale"
+        width, height = img.size
+        entry = {"page": page_no, "source": source, "half": half,
+                 "w": width, "h": height, "mode": mode, "tiles": []}
+        if height / max(width, 1) > tile_ratio:
+            band = int(width * 1.55)
+            step = max(1, int(band * (1 - overlap)))
+            y, k = 0, 0
+            while y < height:
+                k += 1
+                box = (0, y, width, min(y + band, height))
+                out_name = f"p{page_no:04d}_t{k}{ext}"
+                save_image(img.crop(box), os.path.join(out_dir, out_name), fmt, quality)
+                entry["tiles"].append({"file": out_name, "y0": y, "y1": box[3]})
+                if box[3] >= height:
+                    break
+                y += step
+        else:
+            out_name = f"p{page_no:04d}{ext}"
+            save_image(img, os.path.join(out_dir, out_name), fmt, quality)
+            entry["tiles"].append({"file": out_name, "y0": 0, "y1": height})
+        manifest["pages"].append(entry)
+        return counter
+
+    for name in files:
+        img = Image.open(os.path.join(src_dir, name))
+        img.load()
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        w, h = img.size
+        if split_spread and w / max(h, 1) > 1.15:
+            left = img.crop((0, 0, w // 2, h))
+            right = img.crop((w // 2, 0, w, h))
+            halves = [("right", right), ("left", left)] if direction == "rtl" else \
+                     [("left", left), ("right", right)]
+            for half, part in halves:
+                emit(part, name, half, counter + 1)
+        else:
+            emit(img, name, "full", counter + 1)
+
+    with open(manifest_path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=1)
+    return manifest
+
+
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="PDF 拆页")
-    ap.add_argument("--pdf", required=True)
+    ap = argparse.ArgumentParser(description="PDF / 图片目录 → 规范化页图")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--pdf", help="PDF 文件")
+    src.add_argument("--images", help="图片目录")
     ap.add_argument("--out", required=True)
     ap.add_argument("--min-width", type=int, default=1100)
     ap.add_argument("--tile-ratio", type=float, default=2.6)
@@ -141,14 +230,28 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--last-page", type=int, default=None)
     ap.add_argument("--format", choices=["jpg", "png"], default="jpg")
     ap.add_argument("--renumber", action="store_true")
+    ap.add_argument("--split-spread", action="store_true",
+                    help="双页扫描拆成左右两半")
+    ap.add_argument("--direction", choices=["ltr", "rtl"], default="ltr",
+                    help="拆跨页后哪半先读")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args(argv)
-    if not os.path.isfile(args.pdf):
-        ap.error(f"no such file: {args.pdf}")
-    manifest = process(args.pdf, args.out, args.min_width, args.tile_ratio,
-                       max(0.0, min(0.4, args.overlap)), args.dpi, args.quality,
-                       args.limit, args.force, args.first_page, args.last_page,
-                       args.format, args.renumber)
+
+    if args.pdf:
+        if not os.path.isfile(args.pdf):
+            ap.error(f"no such file: {args.pdf}")
+        manifest = process(args.pdf, args.out, args.min_width, args.tile_ratio,
+                           max(0.0, min(0.4, args.overlap)), args.dpi, args.quality,
+                           args.limit, args.force, args.first_page, args.last_page,
+                           args.format, args.renumber)
+    else:
+        if not os.path.isdir(args.images):
+            ap.error(f"no such directory: {args.images}")
+        manifest = process_images(args.images, args.out, args.min_width, args.tile_ratio,
+                                  max(0.0, min(0.4, args.overlap)), args.quality,
+                                  args.limit, args.force, args.format,
+                                  args.split_spread, args.direction)
+
     tiles = sum(len(p["tiles"]) for p in manifest["pages"])
     print(json.dumps({"pages": len(manifest["pages"]), "tiles": tiles,
                       "format": args.format, "out": args.out}, ensure_ascii=False))
