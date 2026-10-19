@@ -15,16 +15,19 @@
 自检一遍（应当通过）：
 
 ```bash
-python ../scripts/check_prose.py \
-  --draft draft-example.md \
-  --outline outline-example.json \
-  --bible bible-example.md \
-  --pages 2
+mnv qa --draft draft-example.md --outline outline-example.json --bible bible-example.md
 ```
 
 一致性审计需要多话的 `outline.json`，示例目录只有一话，跑出来应当是 0 error：
 
 ```bash
 mkdir -p /tmp/audit/ch001 && cp outline-example.json /tmp/audit/ch001/
-python ../scripts/check_consistency.py --work /tmp/audit --bible bible-example.md
+mnv audit --work /tmp/audit --bible bible-example.md
+```
+
+导出成书（含 mobi 与 PNG 封面）：
+
+```bash
+mkdir -p /tmp/book/ch001 && cp draft-example.md /tmp/book/ch001/
+mnv build --work /tmp/book --out /tmp/book/build --title "示例"
 ```

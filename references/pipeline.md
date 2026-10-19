@@ -1,4 +1,4 @@
-# 流水线规范（S0–S7）
+# 流水线规范（S-1 – S8）
 
 > 每个阶段都必须**落盘**。下游只读上游的产物，不读上游的对话。
 
@@ -90,6 +90,22 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 
 ---
 
+## S-1 · 叙事风格配置（前置任务，必做）
+
+在正式改编前先回答：**这部作品怎么讲故事？**
+
+提示词：`prompts/00-style-analysis.md`；规范：`references/style-config.md`。
+
+- 输入：开篇 3–5 话的页图/页脚本、`bible.md`、用户提供的资料。
+- 输出：`work/style.json`（八维度：节奏、情绪、对白、画面转译、信息揭示、描写密度、特有习惯、禁止破坏）+ `style.md`。
+- 每条结论必须给原作依据；资料不足标 `尚未确认`，不凭空假设。
+- 用户确认（`mnv style --action confirm`）之前，不批量写作。
+- 修改后自动快照到 `style_history/`，写作一律读新版。
+
+配置是判断依据，不是套版：整体偏慢的作品，战斗场仍应快；常用留白的作品，不是每场都留白。
+
+---
+
 ## S2.5 · 联网考据
 
 动笔前用公开资料核准设定，减少"看图猜设定"的错误。
@@ -171,40 +187,43 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 
 ## S5 · 写正文
 
-**输入**：`outline.json` + `bible.md` + 上一话结尾 500 字（只用于衔接）。
+**输入**：`outline.json` + `style.md` + `bible.md` + 上一话结尾 300 字（只用于衔接）。
 **输出**：`draft.md`（带 front matter）。
 
-- 字数目标 = 页数 × `config.length_per_page`。
-- 文风、禁词、分段规则见 `references/style-guide.md`。
-- **只吃 outline，不回看原图**。看原图写作 = 重蹈"直接看图写"的覆辙。
+- **不设字数目标**。篇幅由这一话的事件密度与节奏决定，不由页数决定。
+- **不设禁用词表**。用词服务于原作风格；只保留"正文不写分镜说明语言"这一条原则。
+- 先判断每个场景的功能（推进／停顿／反转／铺垫／收束），再决定写多写少。
+- 对白逐字保留语义、语气、停顿、口癖、方言；短句不扩写。
+- **只吃 outline 与 style，不回看原图**。看原图写作 = 重蹈"直接看图写"的覆辙。
 
 提示词：`prompts/03-prose.md`。
 
 ---
 
-## S6 · 质检
+## S6 · 质检（只看忠实）
 
 **输入**：`draft.md`、`outline.json`、`bible.md`、页图（抽 3 页）。
 **输出**：`qa.json`。
 
 ```bash
-python scripts/check_prose.py --draft ch001/draft.md --outline ch001/outline.json \
-       --bible bible.md --pages 29 --out ch001/qa.json
+mnv qa --draft ch001/draft.md --outline ch001/outline.json --bible bible.md --out ch001/qa.json
 ```
 
-脚本自动做的四项：
+脚本自动做的两项：
 
 | 检查 | 算法 | 合格线 |
 |---|---|---|
 | 台词覆盖 | 每条 quote 与正文做模糊匹配（difflib，忽略标点） | ≥ 0.95 |
-| 禁词 | 正则匹配 `config.banned_words` | 0 次 |
-| 长度 | 中文字符计数的区间判断 | 页数×[100,220] |
-| 命名 | 从"X说/X道/X问"抽候选名，比对 `bible.md` 白名单 | 无未知名 |
+| 命名提示 | 从"X说/X道/X问"抽候选名，比对 `bible.md` | 仅提示，不判失败 |
 
-agent 做的两项：
+**不查字数，不查禁词。**
 
-5. **忠实度**：抽首场、高潮、结尾三页原图，只问三件事——有没有原图没有的情节/人物/能力？有没有把旁白当台词？有没有张冠李戴？有则列出并改写。
-6. **连续性**：与上一话 `continuity` 对照（位置、伤势、时间、称呼）。
+agent 做的四项：
+
+1. **事件完整性**：`outline.scenes[].beats` 是否逐条落地（合并可以，漏关键因果不行）。
+2. **忠实度**：抽首场、高潮、结尾三页原图，问——有没有原图没有的情节/人物/能力？有没有把旁白当台词？有没有张冠李戴？有没有把没说出口的话写成说出口？
+3. **声音一致性**：口癖、句长、称呼、方言是否与前一话一致。
+4. **风格执行**：对照 `style.md` 逐场判断，不机械套用。
 
 修补原则：**只改出问题的段落**，不整话重写；补台词时宁可加"他说"，也不删原句；忠实度问题优先于文采。
 
@@ -238,15 +257,17 @@ agent 再按 `prompts/06-consistency-audit.md` 做六类语义判定：**年龄/
 
 ---
 
-## S7 · 汇编
+## S7 · 成书与清理
 
 ```bash
-python scripts/assemble.py --work . --out book
+mnv build --work . --out build --title "书名" --cleanup
 ```
 
 - 读所有 `ch*/draft.md` 的 front matter，按话号排序。
-- 生成 `book/book.md`（含目录）、`book/book.docx`（若装了 python-docx）、`book/stats.csv`。
-- front matter 里的 `场景`/`人物` 汇总成 `book/index.csv`，就是你要的"每话场景与人物表"。
+- 导出 `build/book.md`、`book.docx`（需 python-docx）、`book.epub`、`book.mobi`（内置写出器，不依赖 calibre）。
+- 生成 `cover.png`（优先用第一话首页，没有页图时画标题卡）。
+- `stats.csv`：每话字数；`index.csv`：每话场景与人物。
+- `--cleanup` 或 `mnv clean --work .` 删除中间页图（jpg/png），`--keep` 可保留某一话。
 
 ---
 

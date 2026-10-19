@@ -122,52 +122,94 @@
 
 ## 3. qa（S6 产物，每话一个）
 
+v0.3 起**不再有字数与禁词检查**，只保留忠实度。
+
 ```json
 {
   "chapter": 143,
+  "words": 4820,
   "checks": {
     "quote_coverage": {"pass": true, "value": 0.97, "missing": []},
-    "name_whitelist": {"pass": true, "unknown": []},
-    "banned_words": {"pass": true, "hits": []},
-    "length": {"pass": true, "value": 4820, "range": [3000, 5400]},
-    "faithfulness": {"pass": true, "manual": true, "issues": []},
-    "continuity": {"pass": true, "issues": []}
+    "name_whitelist": {"pass": true, "suspects": [], "advisory": true},
+    "events": {"pass": true, "missing_beats": []},
+    "faithfulness": {"pass": true, "issues": []},
+    "voice": {"pass": true, "issues": []},
+    "style": {"pass": true, "issues": []}
   },
   "fixes": ["s2 补回漏掉的台词"],
-  "score": 92
+  "verdict": "pass"
 }
 ```
 
-扣分规则：每缺 1 条台词 −3；禁词每处 −2；编造每处 −10；连续性冲突 −5；长度越界 −5。
-
-合格线：`quote_coverage ≥ 0.95`、`banned_words.hits` 为空、`faithfulness.pass = true`、`score ≥ 80`。
+- `quote_coverage` 与 `name_whitelist` 由 `mnv qa` 生成；其余由 agent 按 `prompts/04-qa.md` 填写。
+- 合格线：`quote_coverage ≥ 0.95`、`events.pass`、`faithfulness.pass`。
+- `words` 仅作记录，**不作为合格条件**。
 
 ---
 
-## 4. config（每项目一个）
+## 4. config（每项目一个，v2）
 
 ```json
 {
-  "language": "zh",
-  "pov": "third-limited",
-  "tense": "past",
-  "length_per_page": [120, 180],
-  "dialect": "keep",
-  "banned_words": ["画面", "镜头", "分镜", "这一格", "格子", "读者", "对话框", "旁白框"],
-  "output": ["md", "docx"],
-  "title_format": "第X回 {title}",
-  "scene_break": "◇",
-  "reading_direction": "ltr"
+  "version": 2,
+  "work": {
+    "language": "zh",
+    "reading_direction": "ltr",
+    "nonstory_regex": "预告|公告|请假|通知|复刊|小结|获奖|目录|版权|后记",
+    "strip_suffix": ""
+  },
+  "adaptation": {
+    "pov": "third-limited",
+    "tense": "past",
+    "dialect": "keep",
+    "forbid_meta_language": true,
+    "style_config": "style.json"
+  },
+  "output": {
+    "formats": ["md", "docx", "epub", "mobi"],
+    "cover": true,
+    "page_format": "jpg",
+    "cleanup_after_build": true
+  }
 }
 ```
 
 | 字段 | 取值 | 说明 |
 |---|---|---|
-| `pov` | `third-limited` / `third-omniscient` / `first` | 视角 |
-| `tense` | `past` / `present` | 时态 |
-| `length_per_page` | `[min, max]` | 一话字数 = 页数 × 区间 |
-| `dialect` | `keep` / `light` / `none` | 台词方言保留程度 |
-| `reading_direction` | `ltr` / `rtl` | 老式港漫用 `rtl` |
+| `adaptation.pov` | `third-limited` / `third-omniscient` / `first` | 视角 |
+| `adaptation.tense` | `past` / `present` | 时态 |
+| `adaptation.dialect` | `keep` / `light` / `none` | 台词方言保留程度 |
+| `adaptation.style_config` | 文件名 | 叙事风格配置路径 |
+| `output.formats` | `md` `docx` `epub` `mobi` | 成书格式 |
+| `output.page_format` | `jpg` / `png` | 中间页图格式 |
+| `work.reading_direction` | `ltr` / `rtl` | 老式港漫用 `rtl` |
+
+**已移除**：`length_per_page`（字数上下限）、`banned_words`（禁用词表）。
+
+---
+
+## 4b. style（叙事风格配置，S-1 产物）
+
+```json
+{
+  "version": 1,
+  "confirmed": true,
+  "source": "第1-10话 原图与对白",
+  "updated_at": "2026-10-19T14:00:00",
+  "dimensions": {
+    "rhythm": {"label": "叙事节奏", "summary": "…", "evidence": ["第9话 …"], "status": "已确认"},
+    "emotion": {"label": "情绪表达方式", "summary": "…", "evidence": [], "status": "尚未确认"},
+    "dialogue": {"label": "对白特征", "summary": "…", "evidence": [], "status": "已确认"},
+    "visual": {"label": "画面转译方式", "summary": "…", "evidence": [], "status": "已确认"},
+    "reveal": {"label": "信息揭示策略", "summary": "…", "evidence": [], "status": "已确认"},
+    "density": {"label": "段落与描写密度", "summary": "…", "evidence": [], "status": "已确认"},
+    "signature": {"label": "作品特有的表达习惯", "summary": "…", "evidence": [], "status": "已确认"},
+    "forbidden": {"label": "禁止破坏的特征", "summary": "…", "evidence": [], "status": "已确认"}
+  }
+}
+```
+
+`status` ∈ `已确认` / `待确认` / `尚未确认`。资料不足必须标 `尚未确认`，不得凭空假设。
 
 ---
 
