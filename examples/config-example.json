@@ -1,0 +1,12 @@
+{
+  "language": "zh",
+  "pov": "third-limited",
+  "tense": "past",
+  "length_per_page": [120, 180],
+  "dialect": "keep",
+  "banned_words": ["画面", "镜头", "分镜", "这一格", "格子", "读者", "对话框", "旁白框"],
+  "output": ["md", "docx"],
+  "title_format": "第X回 {title}",
+  "scene_break": "◇",
+  "reading_direction": "ltr"
+}

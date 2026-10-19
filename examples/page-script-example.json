@@ -1,0 +1,58 @@
+{
+  "chapter": 1,
+  "part": "上",
+  "page": 1,
+  "layout": "3格：整宽 / 左右分栏 / 整宽",
+  "panels": [
+    {
+      "id": "p1-1",
+      "order": 1,
+      "bbox": [0.02, 0.01, 0.98, 0.28],
+      "shot": "中景",
+      "angle": "平视",
+      "scene": "正殿（室内·白日）",
+      "characters": [
+        {"name": "陈松", "face": "正面", "expression": "得意", "action": "把残缺的令牌按在案上"}
+      ],
+      "visual": "老道士把一块缺了角的黑色令牌按在长案上，案面浮着一层薄灰",
+      "text": [
+        {"type": "speech", "speaker": "陈松", "text": "只有咱们这一门噻！", "confidence": 0.96}
+      ],
+      "notes": "令牌上有螺旋纹"
+    },
+    {
+      "id": "p1-2",
+      "order": 2,
+      "bbox": [0.02, 0.30, 0.48, 0.62],
+      "shot": "特写",
+      "angle": "俯视",
+      "scene": "正殿（室内·白日）",
+      "characters": [
+        {"name": "阿禾", "face": "侧脸", "expression": "迟疑", "action": "视线落在令牌缺角上"}
+      ],
+      "visual": "少年侧脸占据左半格，眼睛盯着案上的缺口，喉结动了一下",
+      "text": [
+        {"type": "thought", "speaker": "阿禾", "text": "缺成这样，还能叫镇派之宝？", "confidence": 0.9}
+      ],
+      "notes": ""
+    },
+    {
+      "id": "p1-3",
+      "order": 3,
+      "bbox": [0.52, 0.30, 0.98, 0.62],
+      "shot": "中景",
+      "angle": "平视",
+      "scene": "正殿（室内·白日）",
+      "characters": [
+        {"name": "陈松", "face": "正面", "expression": "不悦", "action": "抬眼看向少年"}
+      ],
+      "visual": "老道士抬起眼，眉头压下来，身后窗纸透进一片白光",
+      "text": [
+        {"type": "speech", "speaker": "陈松", "text": "你晓得个啥子。", "confidence": 0.94}
+      ],
+      "notes": ""
+    }
+  ],
+  "page_summary": "陈松把令牌按在案上，阿禾质疑，陈松不悦",
+  "uncertain": []
+}

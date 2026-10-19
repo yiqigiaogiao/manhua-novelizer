@@ -1,0 +1,45 @@
+{
+  "chapter": 1,
+  "title": "试作",
+  "pages": 2,
+  "scenes": [
+    {
+      "id": "s1",
+      "place": "正殿",
+      "time": "白日",
+      "pov": "陈松",
+      "beats": [
+        "陈松把残缺令牌按在案上，宣称这是本门至高之物",
+        "阿禾盯着缺角，心里不服",
+        "陈松察觉，出言压他"
+      ],
+      "pages": [1, 2],
+      "transition": "硬切到山道"
+    },
+    {
+      "id": "s2",
+      "place": "山道",
+      "time": "午后",
+      "pov": "阿禾",
+      "beats": ["阿禾追问令牌为何缺角", "陈松不答，只望着远处"],
+      "pages": [3],
+      "transition": ""
+    }
+  ],
+  "cast": [
+    {"name": "陈松", "role": "师父，本话主视角"},
+    {"name": "阿禾", "role": "徒弟，质疑者"}
+  ],
+  "quotes": [
+    {"page": 1, "speaker": "陈松", "text": "只有咱们这一门噻！"},
+    {"page": 1, "speaker": "陈松", "text": "你晓得个啥子。"},
+    {"page": 3, "speaker": "阿禾", "text": "师父，那令牌为什么缺一角？"}
+  ],
+  "threads": {
+    "opened": ["令牌为何缺角"],
+    "advanced": [],
+    "closed": []
+  },
+  "continuity": "开篇，无前情",
+  "uncertain": []
+}

@@ -1,0 +1,21 @@
+# scratch / runtime artifacts
+_test/
+work/
+book/
+output/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editor
+.vscode/
+.idea/
+*.swp
