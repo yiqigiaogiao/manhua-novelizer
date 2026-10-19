@@ -29,8 +29,28 @@ PDF 页图 ──► 页脚本 JSON ──► 章脉络(+state) ──► 正文
 | 多格式 | md / docx / **epub** / **mobi**（内置写出器，无需 calibre）+ **cover.png** |
 | 页图格式 | jpg 或 png；`mnv clean` 一键清理中间图（含 png） |
 | 软件化 | 打包为 `manhua_novelizer` 包，`mnv` 入口 + GUI |
+| 即开即用 | 可打包成**单文件 exe**，双击运行，不需要装 Python |
 
-## 安装
+## 直接用 exe（推荐给非开发者）
+
+下载 `ManhuaNovelizer.exe`，双击即可，无需安装 Python 或依赖。
+
+```powershell
+ManhuaNovelizer.exe                 # 图形界面
+ManhuaNovelizer.exe --selftest      # 自检（确认打包完整）
+ManhuaNovelizer.exe build --work work --out build --title "书名"
+```
+
+自己构建：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1
+# 产物：dist\ManhuaNovelizer.exe（约 90–150 MB，首次启动解压 3–8 秒）
+```
+
+细节与杀软误报处理见 `packaging/README.md`。
+
+## 安装（开发者）
 
 ```bash
 git clone <repo> && cd manhua-novelizer

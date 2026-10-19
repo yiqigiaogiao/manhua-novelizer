@@ -22,6 +22,18 @@ license: MIT
 
 ## 安装与运行
 
+**普通用户：直接双击 exe**，不需要 Python。
+
+```powershell
+ManhuaNovelizer.exe              # 图形界面
+ManhuaNovelizer.exe --selftest   # 自检
+ManhuaNovelizer.exe build --work work --out build --title "书名"
+```
+
+自己构建：`powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1` → `dist\ManhuaNovelizer.exe`。
+
+**开发者：**
+
 ```bash
 pip install -e .            # 或 pip install pymupdf pillow python-docx
 mnv --help                  # 命令行
