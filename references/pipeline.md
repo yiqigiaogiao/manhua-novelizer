@@ -287,6 +287,13 @@ agent 再按 `prompts/06-consistency-audit.md` 做六类语义判定：**年龄/
 
 ## S7 · 成书与清理
 
+开口前先统一引号（台版/日式原稿常用「」，正文要求“”）：
+
+```bash
+python scripts/normalize_quotes.py --work . --check   # 先看有多少
+python scripts/normalize_quotes.py --work .           # 改「」→“”、『』→‘’
+```
+
 ```bash
 python scripts/assemble.py --work . --out build --title "书名" --cleanup
 ```

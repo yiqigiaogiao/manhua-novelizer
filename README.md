@@ -96,6 +96,13 @@ python scripts/assemble.py --work work --out work/build --title "书名" --clean
 
 ## 输出与清理
 
+成书前先把引号统一（台版/日式原稿常见的「」要换成“”）：
+
+```bash
+python scripts/normalize_quotes.py --work work --check   # 先看有多少
+python scripts/normalize_quotes.py --work work           # 「」→“”、『』→‘’
+```
+
 - 成书：`book.md` / `book.docx` / `book.epub` / `book.mobi` / `cover.png` / `stats.csv` / `index.csv`
 - 中间页图常有几百 MB 到几 GB：
 
@@ -103,6 +110,20 @@ python scripts/assemble.py --work work --out work/build --title "书名" --clean
 python scripts/clean_pages.py --work work --dry-run
 python scripts/clean_pages.py --work work --keep work/ch001/pages
 ```
+
+## 省 token：别每页都喂视觉模型
+
+逐页读图约 1.5k token/页，182 页就是 27 万视觉 token。可以按页面分流：
+
+| 方案 | 成本 | 适合 |
+|---|---|---|
+| 本地 OCR（`scripts/ocr_pages.py`） | 0 视觉 token | 对话密集页 |
+| OCR + 400px 缩略图 | ≈15% | 默认推荐 |
+| 本地视觉模型（Qwen2.5-VL / MiniCPM-V） | 电费 | 有显卡、量大 |
+| API 视觉模型 | 100% | 战斗页、跨页、关键揭示 |
+
+开源组合：`comic-text-detector`（切气泡）→ `PaddleOCR/RapidOCR`（识别，含竖排）→ `magi`（分格排序、文字归属说话人），
+再接文本模型写 `page_script.json`。详见 `references/cheap-vision.md` 与 `prompts/01b-page-script-from-ocr.md`。
 
 只删 `.jpg/.jpeg/.png`，正文、JSON、清单、圣经、风格配置都保留。
 

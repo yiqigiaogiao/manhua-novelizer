@@ -42,14 +42,16 @@ python scripts/build_manifest.py --help
 | S2 | 圣经：人物/势力/术法/地名/方言 | agent + `prompts/05-bible.md` | `bible.md` |
 | S2.5 | 联网考据 | agent + `prompts/07-web-research.md` | `refs.md` |
 | S3 | 页脚本：逐页识读成 JSON | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
+| S3-alt | **廉价转录**：本地 OCR 出文字，文本模型整理（零视觉 token） | `python scripts/ocr_pages.py` + `prompts/01b-page-script-from-ocr.md` | `ocr.json` → `page_script.json` |
 | S4 | 章脉络：合页成场、裁说话人、写 state | agent + `prompts/02-chapter-outline.md` | `outline.json` |
 | S5 | 写正文（读 style.md） | agent + `prompts/03-prose.md` | `draft.md` |
 | S6 | 质检：台词覆盖 + 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
 | S6.5 | 全本一致性审计（年龄/建模/死亡/时间线） | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
-| S7 | 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/assemble.py --work . --out build` | `book.*` |
+| S7 | 统一引号 → 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/normalize_quotes.py` → `python scripts/assemble.py` | `book.*` |
 | S8 | 清理中间页图 | `python scripts/clean_pages.py --work .` | 释放磁盘 |
 
-细节见 `references/pipeline.md`；改编原则见 `references/principles.md`；风格配置见 `references/style-config.md`。
+细节见 `references/pipeline.md`；改编原则见 `references/principles.md`；风格配置见 `references/style-config.md`；
+**省钱方案（OCR / 本地模型 / 分级）见 `references/cheap-vision.md`**。
 
 ## 叙事风格配置（前置任务，必做）
 
