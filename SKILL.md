@@ -46,7 +46,7 @@ python scripts/build_manifest.py --help
 | S3-alt | **廉价转录**：本地 OCR 出文字，文本模型整理（零视觉 token） | `python scripts/ocr_pages.py` + `prompts/01b-page-script-from-ocr.md` | `ocr.json` → `page_script.json` |
 | S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子**；beats 写因果链，每场带 `hook_in`/`hook_out` | agent + `prompts/02-chapter-outline.md` | `outline.json` |
 | S5 | 写正文：**逐场打开页脚本写**，读 style.md；**表情/微动作要对白之间穿插** | agent + `prompts/03-prose.md` | `draft.md` |
-| S6 | 质检：台词覆盖 + 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
+| S6 | 质检：**台词覆盖必须 100%**（`--min-coverage` 默认 1.0）+ 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
 | **S6.2** | **沉浸质检**：表情/动作密度、纯对白连排、概括句 | `python scripts/check_immersion.py --work .` | 退出码 0 才继续 |
 | S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
 | **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期 | `python scripts/check_ready.py --work . --check-qa` | 退出码 0 才继续 |

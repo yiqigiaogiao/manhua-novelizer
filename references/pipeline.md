@@ -228,7 +228,23 @@ python scripts/detect_order.py --set rtl --work work                    # 人工
 
 ---
 
-## S6 · 质检（只看忠实）
+## S6 · 质检
+
+**台词覆盖的合格线是 100%，不是 95%。**
+
+```bash
+python scripts/check_prose.py --draft ch001/draft.md --outline ch001/outline.json --bible bible.md
+# 退出码 0 才合格；--min-coverage 默认 1.0
+```
+
+红线（已写进 `prompts/03-prose.md`）：
+
+- outline `quotes` 里每一条对白，都必须**原样**出现在正文里。
+- **不许**：把对白改写成叙述（写"他说已经两天没吃东西"是错的）、
+  合并两句对白、删语气词、因为"啰嗦"就省略——啰嗦是原作特征，不是要修的问题。
+- **允许**：在两句对白之间插入表情、动作、停顿。**加东西可以，减台词不行。**
+
+判据补充：标点型引语（「……」「？」）没有可核对内容，不进分母（见 commit `3177b40`）。（只看忠实）
 
 **输入**：`draft.md`、`outline.json`、`bible.md`、页图（抽 3 页）。
 **输出**：`qa.json`。
