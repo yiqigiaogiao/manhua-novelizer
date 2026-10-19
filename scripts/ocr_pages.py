@@ -72,6 +72,11 @@ def run_paddle(engine, path: str):
 
 
 def normalize_and_sort(lines, width: int, height: int, direction: str, min_conf: float):
+    """归一化 bbox 并按阅读顺序排序。
+
+    竖排页面会被 OCR 切成碎片，这里只排序、不合并——错误合并会造出
+    原句没有的台词。列聚类交给 merge_vertical()，默认关闭。
+    """
     out = []
     for line in lines:
         if line["conf"] < min_conf:
@@ -80,7 +85,6 @@ def normalize_and_sort(lines, width: int, height: int, direction: str, min_conf:
         out.append({"text": line["text"], "conf": round(line["conf"], 3),
                     "bbox": [round(x0 / width, 3), round(y0 / height, 3),
                              round(x1 / width, 3), round(y1 / height, 3)]})
-    # 按行聚类：y 中心相近视为同一行
     out.sort(key=lambda l: (l["bbox"][1] + l["bbox"][3]) / 2)
     rows, current = [], []
     for line in out:
@@ -103,6 +107,43 @@ def normalize_and_sort(lines, width: int, height: int, direction: str, min_conf:
     return ordered
 
 
+def merge_vertical(lines: list[dict], tolerance: float = 0.09) -> list[dict]:
+    """竖排列聚类：把同一竖列的碎片按 y 拼起来。
+
+    仅在确认页面是竖排时使用。风险是跨气泡误合并——合并出的句子
+    必须与原图核对，否则宁可不用。
+    """
+    if not lines:
+        return []
+    work = sorted(lines, key=lambda l: (l["bbox"][0] + l["bbox"][2]) / 2)
+    columns: list[dict] = []
+    for line in work:
+        cx = (line["bbox"][0] + line["bbox"][2]) / 2
+        for col in columns:
+            col_cx = (col["bbox"][0] + col["bbox"][2]) / 2
+            if abs(cx - col_cx) < tolerance:
+                col["bbox"] = [min(col["bbox"][0], line["bbox"][0]),
+                               min(col["bbox"][1], line["bbox"][1]),
+                               max(col["bbox"][2], line["bbox"][2]),
+                               max(col["bbox"][3], line["bbox"][3])]
+                col["parts"].append(line)
+                break
+        else:
+            columns.append({"text": "", "conf": line["conf"], "bbox": list(line["bbox"]),
+                            "parts": [line]})
+    merged = []
+    for col in columns:
+        parts = sorted(col["parts"], key=lambda p: p["bbox"][1])
+        merged.append({
+            "text": "".join(p["text"] for p in parts),
+            "conf": round(sum(p["conf"] for p in parts) / len(parts), 3),
+            "bbox": [round(v, 3) for v in col["bbox"]],
+            "merged_from": len(parts),
+        })
+    merged.sort(key=lambda l: (l["bbox"][1] + l["bbox"][3]) / 2)
+    return merged
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="本地 OCR 提取对白（廉价转录）")
     ap.add_argument("--pages", required=True, help="页图目录")
@@ -110,6 +151,8 @@ def main(argv=None) -> int:
     ap.add_argument("--engine", choices=["rapidocr", "paddle"], default="rapidocr")
     ap.add_argument("--direction", choices=["ltr", "rtl"], default="ltr")
     ap.add_argument("--min-conf", type=float, default=0.5)
+    ap.add_argument("--merge-vertical", action="store_true",
+                    help="竖排列聚类合并（有跨气泡误合并风险，须人工核对）")
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args(argv)
 
@@ -131,9 +174,13 @@ def main(argv=None) -> int:
         raw = run_rapidocr(engine, path) if args.engine == "rapidocr" else run_paddle(engine, path)
         lines = normalize_and_sort(raw, width, height, args.direction, args.min_conf)
         area = sum((l["bbox"][2] - l["bbox"][0]) * (l["bbox"][3] - l["bbox"][1]) for l in lines)
-        pages.append({"page": int(os.path.basename(path)[1:5]), "coverage": round(min(area, 1.0), 3),
-                      "lines": lines})
-        print(f"{os.path.basename(path)} lines={len(lines)} coverage={pages[-1]['coverage']}",
+        entry = {"page": int(os.path.basename(path)[1:5]),
+                 "coverage": round(min(area, 1.0), 3), "lines": lines}
+        if args.merge_vertical:
+            entry["columns"] = merge_vertical(lines)
+            entry["merge_warning"] = "列聚类可能跨气泡误合并，产出台词须与原图核对"
+        pages.append(entry)
+        print(f"{os.path.basename(path)} lines={len(lines)} coverage={entry['coverage']}",
               file=sys.stderr)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)

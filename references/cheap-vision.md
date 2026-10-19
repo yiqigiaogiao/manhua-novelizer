@@ -105,5 +105,50 @@ ollama pull qwen2.5vl:7b     # 或 minicpm-v
 > 1. `pip install rapidocr-onnxruntime` 下载超时（14.9MB 只到 3.4MB）；
 > 2. 重试装上了，但 `import rapidocr_onnxruntime` 直接触发 access violation（0xC0000005）——
 >    onnxruntime 对 Python 3.13 支持不全。已卸载，避免污染环境。
-> 3. 结论：OCR 路线建议用 **Python 3.10–3.12** 的独立虚拟环境，或改 `--engine paddle`。
-> 脚本在缺依赖时只打印安装提示并退出，不会崩。
+## 六、当前仓库的支持程度
+
+- `scripts/ocr_pages.py`：已提供，依赖 `rapidocr-onnxruntime` 或 `paddleocr`；未安装时给出明确提示。
+- `prompts/01b-page-script-from-ocr.md`：纯文本转录提示词，配合 T0/T1 使用。
+
+## 七、实测记录（希德尼娅第 1 卷 p19，2026-10-19）
+
+### 装得上的关键
+
+1. **onnxruntime 1.31.0 是坏 wheel**——`import` 直接 access violation（0xC0000005）。
+   降到 **1.20.1** 即正常。这是崩溃的真正原因，与 Python 版本无关。
+2. Python 3.13 + rapidocr 1.4.4 同样崩；用 `uv venv --python 3.12` 建独立环境最稳。
+3. opencv 5.0 无问题，不用降。
+
+一条命令搞定：
+
+```bash
+uv venv --python 3.12 _ocr_env
+uv pip install --python _ocr_env/Scripts/python.exe rapidocr-onnxruntime "onnxruntime==1.20.1"
+```
+
+### 识别质量
+
+简中/繁体印刷体识别良好（"偷米了。""會被做成肥料""等一下，""16" 均正确，conf 0.87–1.00），
+**但竖排文字会被切成多个碎片**：
+
+```
+conf=0.99 x=618-647 | 人類。
+conf=0.94 x=646-677 | 靠之外的
+conf=0.99 x=679-710 | 我来没見過
+```
+
+同一气泡的三列竖排，被切成 3 个 box，每列内部还可能再碎。
+
+### 竖排不能简单合并
+
+试过按列聚类（16 碎片 → 7 列），但出现**跨气泡错误合并**：
+不同气泡的两列因为 x 接近被并成一句，产生了原句没有的台词。
+**错误合并 = 编造台词，比拆碎更糟。**
+
+所以竖排日漫/台漫的正确姿势是：
+
+```
+comic-text-detector 先切气泡 ──► 每个气泡内 OCR ──► 气泡作为最小单位
+```
+
+没有气泡检测时，宁可输出碎片让文本模型重组，也不要脚本硬合。

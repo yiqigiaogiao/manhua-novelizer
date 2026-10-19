@@ -39,16 +39,20 @@ python scripts/build_manifest.py --help
 | S1 | 拆页：原生图抽取、长条切片、低清放大、jpg/png；也支持图片目录与**双页扫描拆分** | `python scripts/prep_pages.py --pdf x.pdf --out ch001/pages`<br>`python scripts/prep_pages.py --images 卷目录 --out ch001/pages --split-spread --direction rtl` | `pages/p0001.jpg` |
 | S1.5 | **阅读顺序**：左起 / 右起 / 条漫，可人工覆盖 | `python scripts/detect_order.py --pages ch001/pages` | 写入 `config.json` |
 | **S-1** | **叙事风格配置**（八维度，需用户确认） | agent + `prompts/00-style-analysis.md` | `style.json` `style.md` |
+| **S-0** | **全书脊柱**：低清通读全本，写主线/人物弧/时间线/母题/节奏表 | agent + `prompts/00b-spine.md` | `spine.md` |
 | S2 | 圣经：人物/势力/术法/地名/方言 | agent + `prompts/05-bible.md` | `bible.md` |
 | S2.5 | 联网考据 | agent + `prompts/07-web-research.md` | `refs.md` |
-| S3 | 页脚本：逐页识读成 JSON | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
+| S3 | 页脚本：逐页识读成 JSON（**必经，不抽样**） | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
 | S3-alt | **廉价转录**：本地 OCR 出文字，文本模型整理（零视觉 token） | `python scripts/ocr_pages.py` + `prompts/01b-page-script-from-ocr.md` | `ocr.json` → `page_script.json` |
-| S4 | 章脉络：合页成场、裁说话人、写 state | agent + `prompts/02-chapter-outline.md` | `outline.json` |
-| S5 | 写正文（读 style.md） | agent + `prompts/03-prose.md` | `draft.md` |
-| S6 | 质检：台词覆盖 + 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
-| S6.5 | 全本一致性审计（年龄/建模/死亡/时间线） | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
+| S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子** | agent + `prompts/02-chapter-outline.md` | `outline.json` |
+| S5 | 写正文：**逐场打开页脚本写**，读 style.md | agent + `prompts/03-prose.md` | `draft.md` |
+| S6 | 质检：台词覆盖 + 事件完整性 + **沉浸检查** + 抽象句比例 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
+| S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
 | S7 | 统一引号 → 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/normalize_quotes.py` → `python scripts/assemble.py` | `book.*` |
 | S8 | 清理中间页图 | `python scripts/clean_pages.py --work .` | 释放磁盘 |
+
+**全局层与局部层是并列的，不能互相替代**：`spine.md` 管"全书不矛盾"，
+`page_script.json` 管"每一页都在场"，章节 1:1 管"完整还原"。详见 `references/global-local.md`。
 
 细节见 `references/pipeline.md`；改编原则见 `references/principles.md`；风格配置见 `references/style-config.md`；
 **省钱方案（OCR / 本地模型 / 分级）见 `references/cheap-vision.md`**。
