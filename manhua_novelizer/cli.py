@@ -98,6 +98,19 @@ def cmd_style(args) -> int:
     return 0
 
 
+def cmd_order(args) -> int:
+    from . import reading_order
+    if args.set_dir:
+        path = reading_order.apply(args.work, args.set_dir)
+        _print({"direction": args.set_dir, "saved": path})
+        return 0
+    result = reading_order.detect(args.pages, args.sample)
+    if args.work:
+        result["work"] = args.work
+    _print(result)
+    return 0
+
+
 def cmd_gui(args) -> int:
     from . import gui
     gui.main(work=args.work)
@@ -182,6 +195,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--action", choices=["show", "render", "confirm", "check"], default="show")
     p.add_argument("--out", default=None)
     p.set_defaults(func=cmd_style)
+
+    p = sub.add_parser("order", help="检测/设置阅读顺序（ltr/rtl/ttb）")
+    p.add_argument("--pages", default=None, help="页图目录（检测用）")
+    p.add_argument("--work", default="work", help="写入 config.json 的工作目录")
+    p.add_argument("--set", dest="set_dir", choices=["ltr", "rtl", "ttb"], default=None)
+    p.add_argument("--sample", type=int, default=6)
+    p.set_defaults(func=cmd_order)
 
     p = sub.add_parser("gui", help="打开图形界面")
     p.add_argument("--work", default="work")

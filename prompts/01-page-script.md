@@ -36,7 +36,11 @@
 
 ## 规则（按优先级）
 
-1. **阅读顺序**：中文漫画先上后下、同行先左后右（`config.reading_direction = rtl` 时相反）。`order` 从 1 连续编号，`bbox` 用归一化坐标。
+1. **阅读顺序**：读 `config.json` 的 `work.reading_direction`——
+   - `ltr`：先上后下、同行先左后右；
+   - `rtl`：先上后下、同行**先右后左**；
+   - `ttb`：只按纵向，忽略左右。
+   不确认时先跑 `mnv order --pages ...`，再按 `prompts/08-reading-order.md` 人工确认。`order` 从 1 连续编号，`bbox` 用归一化坐标。
 2. **台词逐字**：方言字、语气词、错别字原样保留。"噻"不改"啊"，"啥子"不改"什么"。
 3. **说话人看气泡尾巴**。尾巴被裁、指向不清 → `"speaker": "unknown"`，在 `notes` 写判断依据。**不要硬猜。**
 4. **文本类型**：`speech` 对话 / `thought` 心里话 / `narration` 旁白框 / `sfx` 拟声 / `sign` 招牌字幕印章水印。

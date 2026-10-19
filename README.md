@@ -64,6 +64,8 @@ pip install -e .
 mnv init --work work
 mnv manifest --dir pdf --out work/manifest.csv
 mnv pages --pdf "pdf/001.pdf" --out work/ch001/pages        # 可加 --format png
+mnv order --pages work/ch001/pages --work work              # 阅读顺序：ltr / rtl / ttb
+mnv order --set rtl --work work                             # 检测不准时手动覆盖
 
 # 交给 agent：先做风格配置，再逐话转录/写作
 #   prompts/00-style-analysis.md → work/style.json
@@ -73,6 +75,16 @@ mnv qa --draft work/ch001/draft.md --outline work/ch001/outline.json --bible wor
 mnv audit --work work --bible work/bible.md --out work/audit/consistency.md
 mnv build --work work --out work/build --title "书名" --cleanup
 ```
+
+## 界面
+
+深色桌面风格：左侧导航（流水线 / 叙事风格 / 关于），中间八张步骤卡片，底部运行日志。
+
+![界面](docs/screenshot.png)
+
+- 每张卡片只做一件事，跑完显示「完成」，失败显示「失败」并把原因写进日志。
+- 「阅读顺序」卡片给出 `LTR/RTL/TTB` + 置信度，检测不准可一键覆盖。
+- 「叙事风格」页左侧是八个维度的状态灯，右侧直接编辑 `style.json`，保存自动快照。
 
 成书产物：
 
@@ -129,8 +141,11 @@ manhua-novelizer/
 │  ├─ cli.py  gui.py            入口
 │  ├─ manifest.py  split.py  pages.py
 │  ├─ qa.py  consistency.py
+│  ├─ reading_order.py           阅读顺序检测
 │  ├─ build.py  epub.py  mobi.py
 │  ├─ style.py  config.py
+├─ packaging/                    exe 打包（entry.py / build_exe.ps1 / icon）
+├─ docs/screenshot.png           界面截图
 ├─ prompts/
 │  ├─ 00-style-analysis.md      ★ 前置：风格分析
 │  ├─ 01-page-script.md
@@ -139,7 +154,8 @@ manhua-novelizer/
 │  ├─ 04-qa.md                  ★ 重写：只看忠实
 │  ├─ 05-bible.md
 │  ├─ 06-consistency-audit.md
-│  └─ 07-web-research.md
+│  ├─ 07-web-research.md
+│  └─ 08-reading-order.md       ★ 阅读顺序确认
 ├─ references/
 │  ├─ principles.md             ★ 改编原则（最高准则）
 │  ├─ style-config.md           ★ 风格配置规范

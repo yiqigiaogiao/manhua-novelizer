@@ -49,6 +49,7 @@ mnv gui                     # 图形界面
 | S0 | 建清单：解析文件名、上/中/下去重、剔非正文 | `mnv manifest --dir pdf` | `manifest.csv` |
 | S0b | 合本拆章：按书签或页表切分 | `mnv split --pdf book.pdf --out chapters` | `chNNN_*.pdf` |
 | S1 | 拆页：原生图抽取、长条切片、低清放大、jpg/png | `mnv pages --pdf x.pdf --out ch001/pages` | `pages/p0001.jpg` |
+| S1.5 | **阅读顺序**：左起 / 右起 / 条漫，可人工覆盖 | `mnv order --pages ch001/pages` | 写入 `config.json` |
 | **S-1** | **叙事风格配置**（八维度，需用户确认） | agent + `prompts/00-style-analysis.md` | `style.json` `style.md` |
 | S2 | 圣经：人物/势力/术法/地名/方言 | agent + `prompts/05-bible.md` | `bible.md` |
 | S2.5 | 联网考据 | agent + `prompts/07-web-research.md` | `refs.md` |
@@ -74,6 +75,11 @@ mnv style --action confirm    # 用户确认后标记
 ```
 
 配置是**判断依据，不是套版**：整体偏慢的作品，战斗场仍应快；常用留白的作品，不是每场都留白。
+
+## 图形界面
+
+`mnv gui` 或双击 exe：深色界面，左侧导航（流水线 / 叙事风格 / 关于），中间八张步骤卡片，
+底部运行日志。阅读顺序卡片会给出方向与置信度，并可一键改用 ltr / rtl / ttb。
 
 ## 视觉转译要点
 

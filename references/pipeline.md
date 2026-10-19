@@ -34,14 +34,14 @@ python scripts/build_manifest.py --dir pdf --out manifest.csv
 一册装几十话、或"完本"PDF 时，先拆章，再进 S0/S1：
 
 ```bash
-python scripts/split_book.py --pdf book.pdf --out chapters --dry-run   # 先看边界
-python scripts/split_book.py --pdf book.pdf --out chapters             # 真拆
+mnv split --pdf book.pdf --out chapters --dry-run   # 先看边界
+mnv split --pdf book.pdf --out chapters             # 真拆
 ```
 
 - **有书签**：按 `--toc-regex` 取边界，默认匹配 `第X回/话`、`番外`、`序章`、`终章`。
 - **无书签**：自己写 `chapter-map.csv`（`chapter,title,start,end`），加 `--map chapter-map.csv`。
 - 输出 `chNNN_标题.pdf` + `chapter-index.csv`，并报告**未被覆盖的页**（封面、广告、目录页）。
-- 切完直接 `build_manifest.py --dir chapters`，下游完全不用改。
+- 切完直接 `mnv manifest --dir chapters`，下游完全不用改。
 
 `insert_pdf` 复制原始图像对象，不二次压缩；但会丢掉原书签，`chapter-index.csv` 就是新目录。
 
@@ -66,6 +66,27 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 6. 只想处理合本里的一段：`--first-page 120 --last-page 180`（1 起、含端点）。输出沿用**原书页号**（`p0120.jpg`），便于回溯。
 
 **为什么要切片**：视觉模型会把整图缩到长边约 1500 px，一张 900×14000 的长条缩完每格只剩几十像素，字全糊。切片后每片接近 1:1.5，字才够大。
+
+---
+
+## S1.5 · 阅读顺序（拆页之后、转录之前）
+
+顺序错了，台词归属和动作因果都会错位。
+
+```bash
+mnv order --pages work/ch001/pages --work work     # 检测并建议
+mnv order --set rtl --work work                    # 人工覆盖（ltr / rtl / ttb）
+```
+
+判据（给出方向 + 置信度 + 依据，不黑盒）：
+
+- 竖排文字气泡多 → 倾向 `rtl`（日式漫画）
+- 横排文字气泡多 → 倾向 `ltr`
+- 页面高/宽 > 2.6 → `ttb`（纵向条漫）
+- 上半页气泡整体偏右 → 倾向 `rtl`
+
+置信度 < 0.6 时不要直接采信；人工确认流程见 `prompts/08-reading-order.md`。
+结果写入 `config.json` 的 `work.reading_direction`，S3 转录按它排 `order`。
 
 ---
 
