@@ -44,9 +44,10 @@ python scripts/build_manifest.py --help
 | S2.5 | 联网考据 | agent + `prompts/07-web-research.md` | `refs.md` |
 | S3 | 页脚本：逐页识读成 JSON（**必经，不抽样**） | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
 | S3-alt | **廉价转录**：本地 OCR 出文字，文本模型整理（零视觉 token） | `python scripts/ocr_pages.py` + `prompts/01b-page-script-from-ocr.md` | `ocr.json` → `page_script.json` |
-| S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子** | agent + `prompts/02-chapter-outline.md` | `outline.json` |
-| S5 | 写正文：**逐场打开页脚本写**，读 style.md | agent + `prompts/03-prose.md` | `draft.md` |
-| S6 | 质检：台词覆盖 + 事件完整性 + **沉浸检查** + 抽象句比例 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
+| S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子**；beats 写因果链，每场带 `hook_in`/`hook_out` | agent + `prompts/02-chapter-outline.md` | `outline.json` |
+| S5 | 写正文：**逐场打开页脚本写**，读 style.md；**表情/微动作要对白之间穿插** | agent + `prompts/03-prose.md` | `draft.md` |
+| S6 | 质检：台词覆盖 + 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
+| **S6.2** | **沉浸质检**：表情/动作密度、纯对白连排、概括句 | `python scripts/check_immersion.py --work .` | 退出码 0 才继续 |
 | S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
 | **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期 | `python scripts/check_ready.py --work . --check-qa` | 退出码 0 才继续 |
 | S7 | 统一引号 → 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/normalize_quotes.py` → `python scripts/assemble.py` | `book.*` |
@@ -58,6 +59,11 @@ python scripts/build_manifest.py --help
 
 **全局层与局部层是并列的，不能互相替代**：`spine.md` 管"全书不矛盾"，
 `page_script.json` 管"每一页都在场"，章节 1:1 管"完整还原"。详见 `references/global-local.md`。
+
+**光有具体场景不等于小说。** 实测发现：逐页忠实、台词 100% 覆盖的稿子，
+仍可能"只是把场景描写搬上台"——含对白的段落里 **89–99% 没有任何表情或动作穿插**，
+人物只有台词没有脸，场景之间没有推力。这是 AI 味的另一个主要来源，
+由 S4 的 `hook_in`/`hook_out` 与 S5 的表情穿插共同负责，S6.2 负责拦住。
 
 细节见 `references/pipeline.md`；改编原则见 `references/principles.md`；风格配置见 `references/style-config.md`；
 **省钱方案（OCR / 本地模型 / 分级）见 `references/cheap-vision.md`**。
