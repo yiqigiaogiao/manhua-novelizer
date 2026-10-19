@@ -11,7 +11,7 @@
 
 ## 输出
 
-`work/style.json`，结构见 `references/style-config.md`。同时 `mnv style --action render` 出 `style.md`。
+`work/style.json`，结构见 `references/style-config.md`。同时 `python scripts/style_config.py --action render` 出 `style.md`。
 
 ## 分析要求
 

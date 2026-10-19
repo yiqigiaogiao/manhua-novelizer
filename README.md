@@ -1,4 +1,4 @@
-# Manhua Novelizer · 漫画转小说
+# Manhua Novelizer · 漫画转小说 Skill
 
 把**只有图、没有文本层**的中文漫画 PDF，按原作叙事风格转成小说，并导出成书。
 
@@ -10,159 +10,121 @@ PDF 页图 ──► 页脚本 JSON ──► 章脉络(+state) ──► 正文
                                     (年龄/建模/死亡/时间线)
 ```
 
-## 这是什么
+## 形态
 
-一个**小软件**，不是一堆散脚本：
+这是一个 **skill**，不是软件包：
 
-- `mnv` 命令行：建清单、拆章、拆页、质检、审计、成书、清理、风格配置
-- `mnv gui`：Tkinter 图形界面，同样的功能点按钮
-- 写作本身交给 agent，读 `SKILL.md` 与 `prompts/`
+```
+manhua-novelizer/
+├─ SKILL.md                  agent 主入口（先读这个）
+├─ prompts/                  00–08，写作各阶段的提示词
+├─ references/               改编原则、流程、schema、风格配置规范
+├─ scripts/                  确定性工作：拆页、质检、审计、成书、清理
+└─ examples/                 合成示例
+```
 
-## v0.3 的关键变化
-
-| 变化 | 说明 |
-|---|---|
-| 取消字数限制 | 篇幅由事件密度决定，`qa` 不再查字数 |
-| 取消禁用词表 | 不再用词表卡文本；只保留"不写分镜说明"的原则 |
-| 情节优先 | 质检重心改为：台词覆盖、事件完整性、忠实度、声音一致性 |
-| 叙事风格配置 | 新增前置任务：八维度风格档案，确认后才动笔，改动自动留版本 |
-| 多格式 | md / docx / **epub** / **mobi**（内置写出器，无需 calibre）+ **cover.png** |
-| 页图格式 | jpg 或 png；`mnv clean` 一键清理中间图（含 png） |
-| 软件化 | 打包为 `manhua_novelizer` 包，`mnv` 命令行 + 图形界面 |
+- **脚本**负责机器能判的事：拆页、阅读顺序、台词覆盖、一致性、成书、清理。
+- **agent** 负责需要理解的事：风格分析、逐页转录、写正文。它读 `SKILL.md` 与 `prompts/`。
+- **不需要 API**：脚本不联网；agent 那边本来就有模型。
 
 ## 安装
 
 ```bash
 git clone <repo> && cd manhua-novelizer
-pip install -e .
-# 依赖：pymupdf, pillow；可选 python-docx（docx 导出）
+pip install pymupdf pillow          # 必需
+pip install python-docx             # 可选，导出 docx
 ```
-
-装好后有两个入口：`mnv`（命令行）与 `mnv gui`（图形界面，深色，八张步骤卡）。
 
 ## 快速开始
 
 ```bash
-mnv init --work work
-mnv manifest --dir pdf --out work/manifest.csv
-mnv pages --pdf "pdf/001.pdf" --out work/ch001/pages        # 可加 --format png
-mnv order --pages work/ch001/pages --work work              # 阅读顺序：ltr / rtl / ttb
-mnv order --set rtl --work work                             # 检测不准时手动覆盖
+# 1) 建清单 / 拆页 / 合本拆章
+python scripts/build_manifest.py --dir pdf --out work/manifest.csv
+python scripts/prep_pages.py --pdf "pdf/001.pdf" --out work/ch001/pages
+python scripts/split_book.py --pdf book.pdf --out chapters      # 一册几十话时
 
-# 交给 agent：先做风格配置，再逐话转录/写作
-#   prompts/00-style-analysis.md → work/style.json
-#   mnv style --action render && mnv style --action confirm
+# 2) 阅读顺序（拆页之后、转录之前）
+python scripts/detect_order.py --pages work/ch001/pages --work work
+python scripts/detect_order.py --set rtl --work work
 
-mnv qa --draft work/ch001/draft.md --outline work/ch001/outline.json --bible work/bible.md
-mnv audit --work work --bible work/bible.md --out work/audit/consistency.md
-mnv build --work work --out work/build --title "书名" --cleanup
+# 3) 风格配置（必须，写作前置）
+python scripts/style_config.py --action init --work work
+#   → agent 按 prompts/00-style-analysis.md 填写 work/style.json
+python scripts/style_config.py --action render --work work      # 出 style.md
+python scripts/style_config.py --action confirm --work work     # 确认后才批量写
+python scripts/style_config.py --action check --work work       # 未确认/有空维度 → 退出码 1
+
+# 4) 写作交给 agent：prompts/01 → 02 → 03 → 04
+
+# 5) 质检 / 审计 / 成书 / 清理
+python scripts/check_prose.py --draft work/ch001/draft.md --outline work/ch001/outline.json --bible work/bible.md
+python scripts/check_consistency.py --work work --bible work/bible.md --out work/audit/consistency.md
+python scripts/assemble.py --work work --out work/build --title "书名" --cleanup
 ```
 
-## 界面
+## 七项要求的落点
 
-深色桌面风格：左侧导航（流水线 / 叙事风格 / 关于），中间八张步骤卡片，底部运行日志。
-
-![界面](docs/screenshot.png)
-
-- 每张卡片只做一件事，跑完显示「完成」，失败显示「失败」并把原因写进日志。
-- 「阅读顺序」卡片给出 `LTR/RTL/TTB` + 置信度，检测不准可一键覆盖。
-- 「叙事风格」页左侧是八个维度的状态灯，右侧直接编辑 `style.json`，保存自动快照。
-
-成书产物：
-
-```
-work/build/
-├─ book.md
-├─ book.docx
-├─ book.epub
-├─ book.mobi
-├─ cover.png
-├─ stats.csv
-└─ index.csv
-```
-
-## 图形界面
-
-```bash
-mnv gui
-```
-
-三个区块：工作目录、流水线按钮（清单/拆页/拆章/质检/审计/成书/清理）、叙事风格配置编辑器
-（载入、保存快照、确认、导出 `style.md`）。
-
-## 中间页图清理
-
-一册漫画拆完页，`pages/` 常有几百 MB 到几 GB。三种清法：
-
-```bash
-mnv build --cleanup                 # 成书后自动清
-mnv clean --work work --dry-run     # 先看能省多少
-mnv clean --work work --keep work/ch001/pages   # 保留某一话
-```
-
-只删 `.jpg/.jpeg/.png`，正文、JSON、清单、圣经都保留。
+| 要求 | 实现 |
+|---|---|
+| PNG 及时清理 | `scripts/clean_pages.py`（`--dry-run` / `--keep`）；`assemble.py --cleanup` 成书后自动清 |
+| 取消字数上下限 | 配置无 `length_per_page`；`check_prose.py` 不查长度；提示词写"不写字数目标" |
+| 取消禁用词、情节优先 | 无 `banned_words`；质检改为台词覆盖 / 事件完整性 / 忠实度 / 声音 / 风格 |
+| mobi、png 格式 | `assemble.py` 出 md/docx/epub/**mobi** + **cover.png**；`prep_pages.py --format png` |
+| 软件形式 | `scripts/` 提供完整命令行工具链（无需安装成包） |
+| 叙事风格配置（前置） | 八维度、要依据、`confirmed` 闸门、`style_history/` 版本快照 |
+| 改编原则 | `references/principles.md`：五级优先级、视觉转译、对白、十二条 AI 式补写、A/B/C、自检 |
 
 ## 叙事风格配置
 
 八个维度：叙事节奏、情绪表达、对白特征、画面转译、信息揭示、描写密度、特有表达习惯、禁止破坏的特征。
 
+- 每条都要给**原作依据**，资料不足标 `尚未确认`，不许凭空假设。
+- 保存时自动把上一版快照到 `work/style_history/`，改风格前后可对比。
+- `--action check` 在"未确认"或"仍有空维度"时返回非 0，可以当写作前的闸门。
+- 配置是**判断依据，不是套版**：整体偏慢的作品，战斗场仍应快；常用留白的作品，不是每场都留白。
+
+## 阅读顺序
+
+`scripts/detect_order.py` 给方向 + 置信度 + 依据：
+
+- 竖排文字气泡多 → 倾向 `rtl`（日式漫画）
+- 横排文字气泡多 → 倾向 `ltr`
+- 页面高/宽 > 2.6 → `ttb`（纵向条漫）
+- 上半页气泡整体偏右 → 倾向 `rtl`
+
+置信度 < 0.6 不要直接采信；人工确认流程见 `prompts/08-reading-order.md`。
+
+## 输出与清理
+
+- 成书：`book.md` / `book.docx` / `book.epub` / `book.mobi` / `cover.png` / `stats.csv` / `index.csv`
+- 中间页图常有几百 MB 到几 GB：
+
 ```bash
-mnv style --action check     # 哪些还没填；未确认或仍有空维度时返回非 0（可当闸门用）
-mnv style --action render    # 生成 style.md
-mnv style --action confirm   # 确认后才批量写作
+python scripts/clean_pages.py --work work --dry-run
+python scripts/clean_pages.py --work work --keep work/ch001/pages
 ```
 
-每次保存都会把旧版快照进 `style_history/`，改风格前后可对比。
+只删 `.jpg/.jpeg/.png`，正文、JSON、清单、圣经、风格配置都保留。
 
-## 自检
+## 质量闸门
 
-```bash
-mnv selfcheck
-```
+| 检查 | 合格线 | 谁做 |
+|---|---|---|
+| 台词覆盖（原文对白逐字落地） | ≥ 95% | `scripts/check_prose.py` |
+| 事件完整性（beats 是否落地） | 无关键遗漏 | agent |
+| 忠实度（抽 3 页对照原图） | 无编造 | agent |
+| 一致性（年龄/建模/死亡/时间线） | 0 error | `scripts/check_consistency.py` |
 
-逐条检查：交付文件齐全、没有字数上下限、没有禁用词表、mobi/png 可用、PNG 清理可用、
-CLI+GUI 可用、风格配置八维度/确认/版本、改编原则齐备、Git 状态。全部通过返回 0。
+**没有字数线，没有禁词线。**
 
-## 目录
+## 常见坑
 
-```
-manhua-novelizer/
-├─ SKILL.md                     agent 主入口
-├─ manhua_novelizer/            软件本体
-│  ├─ cli.py  gui.py            入口
-│  ├─ manifest.py  split.py  pages.py
-│  ├─ qa.py  consistency.py
-│  ├─ reading_order.py           阅读顺序检测
-│  ├─ build.py  epub.py  mobi.py
-│  ├─ style.py  config.py
-├─ docs/screenshot.png           界面截图
-├─ prompts/
-│  ├─ 00-style-analysis.md      ★ 前置：风格分析
-│  ├─ 01-page-script.md
-│  ├─ 02-chapter-outline.md
-│  ├─ 03-prose.md               ★ 重写：无字数/无禁词
-│  ├─ 04-qa.md                  ★ 重写：只看忠实
-│  ├─ 05-bible.md
-│  ├─ 06-consistency-audit.md
-│  ├─ 07-web-research.md
-│  └─ 08-reading-order.md       ★ 阅读顺序确认
-├─ references/
-│  ├─ principles.md             ★ 改编原则（最高准则）
-│  ├─ style-config.md           ★ 风格配置规范
-│  ├─ pipeline.md
-│  ├─ schemas.md
-│  └─ research.md
-├─ scripts/                     兼容旧路径的薄壳
-└─ examples/
-```
-
-## 已知限制
-
-- MOBI 写出器为最小实现（PalmDOC 无压缩、无内嵌图），Kindle/KOReader/Calibre 可读；排版不如 calibre 转换精细。
-- 页脚本质量取决于页图分辨率；宽 < 700 px 建议先超分。
-- `qa` 的人名检测是启发式的，仅作提示，不作失败判定。
-- 忠实度与风格执行必须由 agent 抽页复核，脚本判不了。
-- 不做竖排右起老式排版（港漫）；需要时给 `reading_direction: rtl` 并调整阅读顺序。
+- **整回版可能是残片**：同回有"整回"和"上/中/下"时按页数选全。
+- **合本没书签**：`split_book.py` 会报错并提示写 `chapter-map.csv`。
+- **长条页**：高/宽 > 2.6 必须切片，片间留 10–15% 重叠。
+- **低清页**：宽 < 1000 px 放大到 1100+ 再识读。
+- **跨叙事层误报**：回忆/往事给 `state.timeline = "flashback"`，否则死亡与年龄检查会误判。
+- **别用字数判断好坏**：写得短可能是原作就短；写得长可能是把留白填满了。
 
 ## License
 

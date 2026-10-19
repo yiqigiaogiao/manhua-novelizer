@@ -141,7 +141,7 @@ v0.3 起**不再有字数与禁词检查**，只保留忠实度。
 }
 ```
 
-- `quote_coverage` 与 `name_whitelist` 由 `mnv qa` 生成；其余由 agent 按 `prompts/04-qa.md` 填写。
+- `quote_coverage` 与 `name_whitelist` 由 `python scripts/check_prose.py` 生成；其余由 agent 按 `prompts/04-qa.md` 填写。
 - 合格线：`quote_coverage ≥ 0.95`、`events.pass`、`faithfulness.pass`。
 - `words` 仅作记录，**不作为合格条件**。
 

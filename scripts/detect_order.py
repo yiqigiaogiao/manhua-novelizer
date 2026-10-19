@@ -162,8 +162,31 @@ def detect(pages_dir: str, sample: int = 6) -> dict:
 
 
 def apply(work_dir: str, direction: str) -> str:
-    from . import config
+    import _shared as config
     cfg = config.load_config(work_dir)
     cfg.setdefault("work", {})["reading_direction"] = direction
     config.save_config(work_dir, cfg)
     return os.path.join(work_dir, "config.json")
+
+
+def main(argv=None) -> int:
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(description="检测/设置阅读顺序（ltr/rtl/ttb）")
+    ap.add_argument("--pages", default=None, help="页图目录")
+    ap.add_argument("--work", default="work", help="写入 config.json 的工作目录")
+    ap.add_argument("--set", dest="set_dir", choices=["ltr", "rtl", "ttb"], default=None)
+    ap.add_argument("--sample", type=int, default=6)
+    args = ap.parse_args(argv)
+    if args.set_dir:
+        path = apply(args.work, args.set_dir)
+        print(json.dumps({"direction": args.set_dir, "saved": path}, ensure_ascii=False, indent=1))
+        return 0
+    if not args.pages:
+        ap.error("需要 --pages 或 --set")
+    print(json.dumps(detect(args.pages, args.sample), ensure_ascii=False, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

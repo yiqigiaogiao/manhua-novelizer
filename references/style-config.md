@@ -18,8 +18,8 @@
    └─ style.v2.json
 ```
 
-- `mnv style --action render` 生成 `style.md`
-- `mnv style --action confirm` 标记"用户已确认"
+- `python scripts/style_config.py --action render` 生成 `style.md`
+- `python scripts/style_config.py --action confirm` 标记"用户已确认"
 - 修改后旧版本自动进 `style_history/`，可对比
 - `confirmed=false` 时，写作步骤应拒绝批量开工
 
@@ -78,8 +78,8 @@
 
 ## 修改流程
 
-1. 用户在 `style.json` 或 GUI 里改。
+1. 用户直接编辑 `work/style.json`。
 2. 保存（自动快照旧版）。
-3. `mnv style --action render` 重新生成 `style.md`。
+3. `python scripts/style_config.py --action render` 重新生成 `style.md`。
 4. 后续生成一律读新版；旧版留在 `style_history/` 以便比较。
 5. 重大修改后重跑一话样章，确认文风，再放量。

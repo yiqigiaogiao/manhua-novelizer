@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""项目配置：流水线参数 + 叙事风格配置的读写。"""
+"""脚本共用的小工具：配置读写、front matter、字数统计。"""
 from __future__ import annotations
 
 import json
 import os
-from typing import Any
 
-DEFAULT_CONFIG: dict[str, Any] = {
+DEFAULT_CONFIG = {
     "version": 2,
     "work": {
         "language": "zh",
@@ -32,11 +31,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 def deep_merge(base: dict, override: dict) -> dict:
     out = dict(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = deep_merge(out[key], value)
+    for k, v in override.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
         else:
-            out[key] = value
+            out[k] = v
     return out
 
 
@@ -45,8 +44,7 @@ def load_config(work_dir: str) -> dict:
     if not os.path.isfile(path):
         return json.loads(json.dumps(DEFAULT_CONFIG))
     with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
-    return deep_merge(DEFAULT_CONFIG, data)
+        return deep_merge(DEFAULT_CONFIG, json.load(fh))
 
 
 def save_config(work_dir: str, config: dict) -> str:
@@ -58,7 +56,6 @@ def save_config(work_dir: str, config: dict) -> str:
 
 
 def init_work(work_dir: str, force: bool = False) -> dict:
-    """建立工作目录骨架，不覆盖已有配置。"""
     os.makedirs(work_dir, exist_ok=True)
     path = os.path.join(work_dir, "config.json")
     if force or not os.path.isfile(path):
@@ -66,3 +63,27 @@ def init_work(work_dir: str, force: bool = False) -> dict:
     for sub in ("audit", "build", "style_history"):
         os.makedirs(os.path.join(work_dir, sub), exist_ok=True)
     return load_config(work_dir)
+
+
+def read_text(path: str) -> str:
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def split_front_matter(text: str) -> tuple[dict, str]:
+    if not text.startswith("---"):
+        return {}, text
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}, text
+    meta = {}
+    for line in parts[1].splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key, value = key.strip(), value.strip()
+        if value.startswith("[") and value.endswith("]"):
+            meta[key] = [v.strip() for v in value[1:-1].split(",") if v.strip()]
+        else:
+            meta[key] = value
+    return meta, parts[2]

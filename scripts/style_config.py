@@ -108,3 +108,48 @@ def render_markdown(style: dict) -> str:
     lines.append("> 使用方法：逐场判断，不要把配置机械套到每个段落。")
     lines.append("> 整体偏慢的作品，战斗场仍应快；常用留白的作品，也不是每场都要留白。")
     return "\n".join(lines)
+
+
+def main(argv=None) -> int:
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(description="叙事风格配置")
+    ap.add_argument("--work", default="work")
+    ap.add_argument("--action", choices=["init", "show", "render", "confirm", "check"],
+                    default="show")
+    ap.add_argument("--out", default=None)
+    args = ap.parse_args(argv)
+
+    if args.action == "init":
+        import _shared
+        _shared.init_work(args.work)
+        st = load_style(args.work)
+        if not __import__("os").path.isfile(style_path(args.work)):
+            save_style(args.work, st, snapshot=False)
+        print(json.dumps({"style": style_path(args.work), "dimensions": len(DIMENSIONS)},
+                         ensure_ascii=False, indent=1))
+        return 0
+
+    st = load_style(args.work)
+    if args.action == "render":
+        out = args.out or __import__("os").path.join(args.work, "style.md")
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write(render_markdown(st))
+        print(json.dumps({"rendered": out}, ensure_ascii=False))
+        return 0
+    if args.action == "confirm":
+        st["confirmed"] = True
+        print(json.dumps({"saved": save_style(args.work, st), "confirmed": True},
+                         ensure_ascii=False))
+        return 0
+    if args.action == "check":
+        pending = pending_dimensions(st)
+        print(json.dumps({"pending": pending, "confirmed": st.get("confirmed", False)},
+                         ensure_ascii=False, indent=1))
+        return 0 if (st.get("confirmed") and not pending) else 1
+    print(json.dumps(st, ensure_ascii=False, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

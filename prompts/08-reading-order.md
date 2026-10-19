@@ -6,7 +6,7 @@
 ## 机器检测
 
 ```bash
-mnv order --pages work/ch001/pages --work work
+python scripts/detect_order.py --pages work/ch001/pages --work work
 ```
 
 输出：
@@ -40,7 +40,7 @@ mnv order --pages work/ch001/pages --work work
 确认后写入配置（会覆盖自动检测结果）：
 
 ```bash
-mnv order --set rtl --work work
+python scripts/detect_order.py --set rtl --work work
 # 或 ltr / ttb
 ```
 

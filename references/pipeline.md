@@ -34,14 +34,14 @@ python scripts/build_manifest.py --dir pdf --out manifest.csv
 一册装几十话、或"完本"PDF 时，先拆章，再进 S0/S1：
 
 ```bash
-mnv split --pdf book.pdf --out chapters --dry-run   # 先看边界
-mnv split --pdf book.pdf --out chapters             # 真拆
+python scripts/split_book.py --pdf book.pdf --out chapters --dry-run   # 先看边界
+python scripts/split_book.py --pdf book.pdf --out chapters             # 真拆
 ```
 
 - **有书签**：按 `--toc-regex` 取边界，默认匹配 `第X回/话`、`番外`、`序章`、`终章`。
 - **无书签**：自己写 `chapter-map.csv`（`chapter,title,start,end`），加 `--map chapter-map.csv`。
 - 输出 `chNNN_标题.pdf` + `chapter-index.csv`，并报告**未被覆盖的页**（封面、广告、目录页）。
-- 切完直接 `mnv manifest --dir chapters`，下游完全不用改。
+- 切完直接 `python scripts/build_manifest.py --dir chapters`，下游完全不用改。
 
 `insert_pdf` 复制原始图像对象，不二次压缩；但会丢掉原书签，`chapter-index.csv` 就是新目录。
 
@@ -74,8 +74,8 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 顺序错了，台词归属和动作因果都会错位。
 
 ```bash
-mnv order --pages work/ch001/pages --work work     # 检测并建议
-mnv order --set rtl --work work                    # 人工覆盖（ltr / rtl / ttb）
+python scripts/detect_order.py --pages work/ch001/pages --work work     # 检测并建议
+python scripts/detect_order.py --set rtl --work work                    # 人工覆盖（ltr / rtl / ttb）
 ```
 
 判据（给出方向 + 置信度 + 依据，不黑盒）：
@@ -120,7 +120,7 @@ mnv order --set rtl --work work                    # 人工覆盖（ltr / rtl / 
 - 输入：开篇 3–5 话的页图/页脚本、`bible.md`、用户提供的资料。
 - 输出：`work/style.json`（八维度：节奏、情绪、对白、画面转译、信息揭示、描写密度、特有习惯、禁止破坏）+ `style.md`。
 - 每条结论必须给原作依据；资料不足标 `尚未确认`，不凭空假设。
-- 用户确认（`mnv style --action confirm`）之前，不批量写作。
+- 用户确认（`python scripts/style_config.py --action confirm`）之前，不批量写作。
 - 修改后自动快照到 `style_history/`，写作一律读新版。
 
 配置是判断依据，不是套版：整体偏慢的作品，战斗场仍应快；常用留白的作品，不是每场都留白。
@@ -227,7 +227,7 @@ mnv order --set rtl --work work                    # 人工覆盖（ltr / rtl / 
 **输出**：`qa.json`。
 
 ```bash
-mnv qa --draft ch001/draft.md --outline ch001/outline.json --bible bible.md --out ch001/qa.json
+python scripts/check_prose.py --draft ch001/draft.md --outline ch001/outline.json --bible bible.md --out ch001/qa.json
 ```
 
 脚本自动做的两项：
@@ -281,14 +281,14 @@ agent 再按 `prompts/06-consistency-audit.md` 做六类语义判定：**年龄/
 ## S7 · 成书与清理
 
 ```bash
-mnv build --work . --out build --title "书名" --cleanup
+python scripts/assemble.py --work . --out build --title "书名" --cleanup
 ```
 
 - 读所有 `ch*/draft.md` 的 front matter，按话号排序。
 - 导出 `build/book.md`、`book.docx`（需 python-docx）、`book.epub`、`book.mobi`（内置写出器，不依赖 calibre）。
 - 生成 `cover.png`（优先用第一话首页，没有页图时画标题卡）。
 - `stats.csv`：每话字数；`index.csv`：每话场景与人物。
-- `--cleanup` 或 `mnv clean --work .` 删除中间页图（jpg/png），`--keep` 可保留某一话。
+- `--cleanup` 或 `python scripts/clean_pages.py --work .` 删除中间页图（jpg/png），`--keep` 可保留某一话。
 
 ---
 
