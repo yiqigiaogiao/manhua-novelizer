@@ -90,9 +90,10 @@ def cmd_style(args) -> int:
         _print({"saved": style.save_style(args.work, st), "confirmed": True})
         return 0
     if args.action == "check":
-        _print({"pending": style.pending_dimensions(st),
-                "confirmed": st.get("confirmed", False)})
-        return 0
+        pending = style.pending_dimensions(st)
+        _print({"pending": pending, "confirmed": st.get("confirmed", False)})
+        # 作为写作前的闸门：未确认或还有空维度时返回非 0
+        return 0 if (st.get("confirmed") and not pending) else 1
     # show / init
     _print(st)
     return 0
@@ -109,6 +110,11 @@ def cmd_order(args) -> int:
         result["work"] = args.work
     _print(result)
     return 0
+
+
+def cmd_selfcheck(args) -> int:
+    from . import selfcheck
+    return selfcheck.main()
 
 
 def cmd_gui(args) -> int:
@@ -202,6 +208,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--set", dest="set_dir", choices=["ltr", "rtl", "ttb"], default=None)
     p.add_argument("--sample", type=int, default=6)
     p.set_defaults(func=cmd_order)
+
+    p = sub.add_parser("selfcheck", help="自检交付要求是否满足")
+    p.set_defaults(func=cmd_selfcheck)
 
     p = sub.add_parser("gui", help="打开图形界面")
     p.add_argument("--work", default="work")

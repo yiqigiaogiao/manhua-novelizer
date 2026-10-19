@@ -22,25 +22,15 @@ license: MIT
 
 ## 安装与运行
 
-**普通用户：直接双击 exe**，不需要 Python。
-
-```powershell
-ManhuaNovelizer.exe              # 图形界面
-ManhuaNovelizer.exe --selftest   # 自检
-ManhuaNovelizer.exe build --work work --out build --title "书名"
-```
-
-自己构建：`powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1` → `dist\ManhuaNovelizer.exe`。
-
-**开发者：**
-
 ```bash
-pip install -e .            # 或 pip install pymupdf pillow python-docx
+pip install -e .            # 依赖 pymupdf / pillow；docx 导出另需 python-docx
 mnv --help                  # 命令行
 mnv gui                     # 图形界面
 ```
 
 无参数时也可 `python -m manhua_novelizer`。
+
+**说明**：本项目提供的是 Python 包（命令行 + 图形界面），不发布 exe；写作仍由 agent 读 `SKILL.md` 与 `prompts/` 执行。
 
 ## 流程
 
@@ -78,7 +68,7 @@ mnv style --action confirm    # 用户确认后标记
 
 ## 图形界面
 
-`mnv gui` 或双击 exe：深色界面，左侧导航（流水线 / 叙事风格 / 关于），中间八张步骤卡片，
+`mnv gui`：深色界面，左侧导航（流水线 / 叙事风格 / 关于），中间八张步骤卡片，
 底部运行日志。阅读顺序卡片会给出方向与置信度，并可一键改用 ltr / rtl / ttb。
 
 ## 视觉转译要点

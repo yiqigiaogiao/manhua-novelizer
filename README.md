@@ -28,35 +28,17 @@ PDF 页图 ──► 页脚本 JSON ──► 章脉络(+state) ──► 正文
 | 叙事风格配置 | 新增前置任务：八维度风格档案，确认后才动笔，改动自动留版本 |
 | 多格式 | md / docx / **epub** / **mobi**（内置写出器，无需 calibre）+ **cover.png** |
 | 页图格式 | jpg 或 png；`mnv clean` 一键清理中间图（含 png） |
-| 软件化 | 打包为 `manhua_novelizer` 包，`mnv` 入口 + GUI |
-| 即开即用 | 可打包成**单文件 exe**，双击运行，不需要装 Python |
+| 软件化 | 打包为 `manhua_novelizer` 包，`mnv` 命令行 + 图形界面 |
 
-## 直接用 exe（推荐给非开发者）
-
-下载 `ManhuaNovelizer.exe`，双击即可，无需安装 Python 或依赖。
-
-```powershell
-ManhuaNovelizer.exe                 # 图形界面
-ManhuaNovelizer.exe --selftest      # 自检（确认打包完整）
-ManhuaNovelizer.exe build --work work --out build --title "书名"
-```
-
-自己构建：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1
-# 产物：dist\ManhuaNovelizer.exe（约 90–150 MB，首次启动解压 3–8 秒）
-```
-
-细节与杀软误报处理见 `packaging/README.md`。
-
-## 安装（开发者）
+## 安装
 
 ```bash
 git clone <repo> && cd manhua-novelizer
 pip install -e .
 # 依赖：pymupdf, pillow；可选 python-docx（docx 导出）
 ```
+
+装好后有两个入口：`mnv`（命令行）与 `mnv gui`（图形界面，深色，八张步骤卡）。
 
 ## 快速开始
 
@@ -125,12 +107,21 @@ mnv clean --work work --keep work/ch001/pages   # 保留某一话
 八个维度：叙事节奏、情绪表达、对白特征、画面转译、信息揭示、描写密度、特有表达习惯、禁止破坏的特征。
 
 ```bash
-mnv style --action check     # 哪些还没填
+mnv style --action check     # 哪些还没填；未确认或仍有空维度时返回非 0（可当闸门用）
 mnv style --action render    # 生成 style.md
 mnv style --action confirm   # 确认后才批量写作
 ```
 
 每次保存都会把旧版快照进 `style_history/`，改风格前后可对比。
+
+## 自检
+
+```bash
+mnv selfcheck
+```
+
+逐条检查：交付文件齐全、没有字数上下限、没有禁用词表、mobi/png 可用、PNG 清理可用、
+CLI+GUI 可用、风格配置八维度/确认/版本、改编原则齐备、Git 状态。全部通过返回 0。
 
 ## 目录
 
@@ -144,7 +135,6 @@ manhua-novelizer/
 │  ├─ reading_order.py           阅读顺序检测
 │  ├─ build.py  epub.py  mobi.py
 │  ├─ style.py  config.py
-├─ packaging/                    exe 打包（entry.py / build_exe.ps1 / icon）
 ├─ docs/screenshot.png           界面截图
 ├─ prompts/
 │  ├─ 00-style-analysis.md      ★ 前置：风格分析
