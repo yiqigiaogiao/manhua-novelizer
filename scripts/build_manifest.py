@@ -87,7 +87,14 @@ def parse_name(stem: str, strip_suffix: str) -> dict:
         prefix = stem[:mm.start()]
         rest = stem[mm.end():]
     else:
-        rest = stem
+        # files produced by split_book.py: ch003_5_番外闲话.pdf / ch012_标题.pdf
+        cm = re.match(r"^ch(\d+)(_5)?[_\-\s]*(.*)$", stem, re.I)
+        if cm:
+            chapter = int(cm.group(1))
+            half = bool(cm.group(2))
+            rest = cm.group(3)
+        else:
+            rest = stem
 
     rest = rest.strip(" -—·_：:\t")
     part = ""

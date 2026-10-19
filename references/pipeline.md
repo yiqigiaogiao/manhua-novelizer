@@ -29,6 +29,24 @@ python scripts/build_manifest.py --dir pdf --out manifest.csv
 
 ---
 
+## S0b · 合本 PDF 拆章
+
+一册装几十话、或"完本"PDF 时，先拆章，再进 S0/S1：
+
+```bash
+python scripts/split_book.py --pdf book.pdf --out chapters --dry-run   # 先看边界
+python scripts/split_book.py --pdf book.pdf --out chapters             # 真拆
+```
+
+- **有书签**：按 `--toc-regex` 取边界，默认匹配 `第X回/话`、`番外`、`序章`、`终章`。
+- **无书签**：自己写 `chapter-map.csv`（`chapter,title,start,end`），加 `--map chapter-map.csv`。
+- 输出 `chNNN_标题.pdf` + `chapter-index.csv`，并报告**未被覆盖的页**（封面、广告、目录页）。
+- 切完直接 `build_manifest.py --dir chapters`，下游完全不用改。
+
+`insert_pdf` 复制原始图像对象，不二次压缩；但会丢掉原书签，`chapter-index.csv` 就是新目录。
+
+---
+
 ## S1 · 拆页
 
 **输入**：单个 PDF。
@@ -45,6 +63,7 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 3. 宽 < `--min-width`（默认 1100）用 Lanczos 放大。低清页放大后仍可读，但模糊字要进 `uncertain`。
 4. 高/宽 > `--tile-ratio`（默认 2.6）视为长条页：按 1.55:1 切横带，相邻带重叠 12%。
 5. 命名必须稳定：页码 4 位补零，`p0007.jpg` / `p0007_t3.jpg`。
+6. 只想处理合本里的一段：`--first-page 120 --last-page 180`（1 起、含端点）。输出沿用**原书页号**（`p0120.jpg`），便于回溯。
 
 **为什么要切片**：视觉模型会把整图缩到长边约 1500 px，一张 900×14000 的长条缩完每格只剩几十像素，字全糊。切片后每片接近 1:1.5，字才够大。
 
@@ -68,6 +87,21 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 4. 每 10 话增量更新一次，冲突条目加删除线并注明"第 X 话修正"。
 
 提示词：`prompts/05-bible.md`。
+
+---
+
+## S2.5 · 联网考据
+
+动笔前用公开资料核准设定，减少"看图猜设定"的错误。
+
+提示词：`prompts/07-web-research.md`。产物：
+
+- `refs.md`：作品信息、人物表、时间线、设定名词，每条带 URL 与可信度。
+- `claims.csv`：`claim,subject,value,source,confidence,note`。
+
+优先级：**原图 > 官方 > 百科 > 粉丝贴**。冲突写进 `refs.md` 的"争议"节，正文不要写死。
+
+用途有两个：S3/S5 判断人物身份与术语；S6.5 提供"外部事实"做交叉验证。
 
 ---
 
@@ -128,6 +162,9 @@ python scripts/prep_pages.py --pdf "pdf/001.pdf" --out ch001/pages [--min-width 
 
 还必须写 `continuity`：一句话说明"接上话哪里、人物在哪、身上什么状态"，供 S5 衔接、S6 校验。
 
+还必须写 `state`：`year`（故事内年份序号）、`flashback`、`cast.<名>.{age,status,look,place}`。
+这是 S6.5 全本审计的唯一输入——没有它，年龄与"建模"变化根本查不出来。
+
 提示词：`prompts/02-chapter-outline.md`。
 
 ---
@@ -172,6 +209,32 @@ agent 做的两项：
 修补原则：**只改出问题的段落**，不整话重写；补台词时宁可加"他说"，也不删原句；忠实度问题优先于文采。
 
 提示词：`prompts/04-qa.md`。
+
+---
+
+## S6.5 · 全本一致性审计
+
+单话质检查不出"跨话矛盾"，这一步专治：
+
+```bash
+python scripts/check_consistency.py --work . --bible bible.md \
+       --out audit/consistency.md --json audit/consistency.json
+```
+
+机器查五类：
+
+| 类型 | 判据 | 级别 |
+|---|---|---|
+| `time` | `year` 倒退且没标 `flashback` | warn |
+| `ageing` | 时间前进 N 年，年龄不涨/倒退 | error / warn |
+| `death` | 已标 `dead` 的角色在后话又活着出现 | error |
+| `look` | 本话外观与 bible 基准差异过大，或前后话突变 | warn / info |
+| `names` | 出场人物不在 bible | warn |
+
+agent 再按 `prompts/06-consistency-audit.md` 做六类语义判定：**年龄/成长、外貌/建模、死亡/退场、
+时间线、称谓/关系、能力/设定**。它负责机器判不了的部分——比如"换了皮甲"是剧情合理还是画错。
+
+处置：`error` 必修；`warn` 逐条判定（改正文 / 补 bible / 标合理变化）；`info` 记入 bible。
 
 ---
 

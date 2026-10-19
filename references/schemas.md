@@ -100,6 +100,13 @@
     "closed": []
   },
   "continuity": "接上话结尾：主角仍在山中，左肩带伤",
+  "state": {
+    "year": 3,
+    "flashback": false,
+    "cast": {
+      "陈松": {"age": 62, "status": "alive", "look": "灰白短须，藏青道袍", "place": "正殿"}
+    }
+  },
   "uncertain": ["第 12 页一句台词两处模糊"]
 }
 ```
@@ -109,6 +116,7 @@
 - `beats` 必须是因果句（"因为…所以…"/"用…压服…"），不能是"他抬手/他说话"的流水账。
 - `quotes` 是 S6 的对账依据，**逐字**，5–20 条。
 - `continuity` 必填一句话。
+- `state` 必填，字段见下节。
 
 ---
 
@@ -160,3 +168,78 @@
 | `length_per_page` | `[min, max]` | 一话字数 = 页数 × 区间 |
 | `dialect` | `keep` / `light` / `none` | 台词方言保留程度 |
 | `reading_direction` | `ltr` / `rtl` | 老式港漫用 `rtl` |
+
+---
+
+## 5. state（outline.json 的一部分，S6.5 的输入）
+
+```json
+"state": {
+  "year": 3,
+  "flashback": false,
+  "cast": {
+    "陈松": {"age": 62, "status": "alive", "look": "灰白短须，藏青道袍", "place": "正殿"},
+    "阿禾": {"age": 14, "status": "alive", "look": "束发，旧棉袍", "place": "山道"}
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `year` | number | 故事内年份**序号**，全书写同一把尺子（主线第 3 年就写 3） |
+| `flashback` | bool | 本话是闪回时为 `true`，审计会放行时间倒退 |
+| `cast.<名>.age` | number | 故事内年龄；不确定就省略，不要猜 |
+| `cast.<名>.status` | enum | `alive` / `dead` / `absent` |
+| `cast.<名>.look` | string | 本话实际外观：发型、衣着、疤痕、武器、体型（抓"建模改了"靠它） |
+| `cast.<名>.place` | string | 本话所在位置 |
+
+---
+
+## 6. chapter-map.csv（多章合本 PDF 的手工切分表）
+
+PDF 没有书签时，用它告诉 `split_book.py` 章节边界：
+
+```csv
+chapter,title,start,end
+1,皓光当空,1,29
+2,阴阳仙君,30,78
+3,千年之谣,79,120
+3.5,番外 闲话,121,160
+```
+
+- `start` / `end` 是 1 起的页号，**含端点**。
+- 允许留空 `chapter`（按顺序编号）；不允许重叠。
+- 切分后 `split_book.py` 会输出 `chapter-index.csv` 和"未被覆盖的页"清单。
+
+---
+
+## 7. consistency.json（S6.5 机器报告）
+
+```json
+{
+  "chapters": 164,
+  "issues": [
+    {"severity": "error", "kind": "ageing", "chapter": 2,
+     "message": "阿禾 年龄从 12 倒退到 11（时间前进 5 年）", "character": "阿禾"},
+    {"severity": "warn", "kind": "look", "chapter": 37,
+     "message": "阿禾 的外貌与圣经基准差异较大（相似度 0.25）",
+     "character": "阿禾", "bible": "束发，旧棉袍", "now": "短发，皮甲"}
+  ]
+}
+```
+
+`kind` 取值：`time` / `ageing` / `death` / `look` / `names` / `state`。
+`severity`：`error`（必须改）/ `warn`（需判断）/ `info`（记录即可）。
+
+---
+
+## 8. refs.md / claims.csv（S2.5 联网考据）
+
+`claims.csv`：
+
+```csv
+claim,subject,value,source,confidence,note
+陈松在第40回死亡,陈松,死亡,https://…,wiki,与第41回回忆不冲突
+```
+
+`confidence` 只用三档：`official` / `wiki` / `fan`。优先级：原图 > official > wiki > fan。

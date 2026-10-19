@@ -41,5 +41,13 @@
     "closed": []
   },
   "continuity": "开篇，无前情",
+  "state": {
+    "year": 1,
+    "flashback": false,
+    "cast": {
+      "陈松": {"age": 60, "status": "alive", "look": "灰白短须，藏青道袍", "place": "正殿"},
+      "阿禾": {"age": 12, "status": "alive", "look": "束发，旧棉袍", "place": "正殿"}
+    }
+  },
   "uncertain": []
 }

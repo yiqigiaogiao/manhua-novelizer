@@ -47,7 +47,7 @@ def page_image(doc: pymupdf.Document, page: pymupdf.Page, dpi: int) -> tuple[Ima
 
 def process(pdf_path: str, out_dir: str, min_width: int, tile_ratio: float,
             overlap: float, dpi: int, quality: int, limit: int | None,
-            force: bool) -> dict:
+            force: bool, first_page: int = 1, last_page: int | None = None) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     manifest_path = os.path.join(out_dir, "pages.json")
     if os.path.exists(manifest_path) and not force:
@@ -58,12 +58,17 @@ def process(pdf_path: str, out_dir: str, min_width: int, tile_ratio: float,
             return existing
 
     doc = pymupdf.open(pdf_path)
-    manifest = {"source": os.path.basename(pdf_path), "pages": []}
+    total = doc.page_count
+    start = max(1, first_page)
+    end = min(last_page or total, total)
+    selected = [(pno, doc[pno - 1]) for pno in range(start, end + 1)]
+    if limit:
+        selected = selected[:limit]
+
+    manifest = {"source": os.path.basename(pdf_path), "range": [start, end],
+                "pages": []}
     try:
-        pages = list(doc)
-        if limit:
-            pages = pages[:limit]
-        for index, page in enumerate(pages, start=1):
+        for pno, page in selected:
             img, mode = page_image(doc, page, dpi)
             width, height = img.size
             if width < min_width:
@@ -72,7 +77,7 @@ def process(pdf_path: str, out_dir: str, min_width: int, tile_ratio: float,
                 mode += "+upscale"
             width, height = img.size
 
-            entry = {"page": index, "w": width, "h": height, "mode": mode, "tiles": []}
+            entry = {"page": pno, "w": width, "h": height, "mode": mode, "tiles": []}
             if height / max(width, 1) > tile_ratio:
                 band = int(width * 1.55)
                 step = max(1, int(band * (1 - overlap)))
@@ -80,14 +85,14 @@ def process(pdf_path: str, out_dir: str, min_width: int, tile_ratio: float,
                 while y < height:
                     k += 1
                     box = (0, y, width, min(y + band, height))
-                    name = f"p{index:04d}_t{k}.jpg"
+                    name = f"p{pno:04d}_t{k}.jpg"
                     save_jpeg(img.crop(box), os.path.join(out_dir, name), quality)
                     entry["tiles"].append({"file": name, "y0": y, "y1": box[3]})
                     if box[3] >= height:
                         break
                     y += step
             else:
-                name = f"p{index:04d}.jpg"
+                name = f"p{pno:04d}.jpg"
                 save_jpeg(img, os.path.join(out_dir, name), quality)
                 entry["tiles"].append({"file": name, "y0": 0, "y1": height})
             manifest["pages"].append(entry)
@@ -108,7 +113,9 @@ def main() -> int:
     ap.add_argument("--overlap", type=float, default=0.12, help="overlap between slices (0-0.4)")
     ap.add_argument("--dpi", type=int, default=200, help="render DPI when no embedded JPEG is usable")
     ap.add_argument("--quality", type=int, default=92, help="JPEG quality for output")
-    ap.add_argument("--limit", type=int, default=None, help="only process the first N pages (smoke test)")
+    ap.add_argument("--limit", type=int, default=None, help="only process the first N selected pages (smoke test)")
+    ap.add_argument("--first-page", type=int, default=1, help="first page of a range (1-based, inclusive)")
+    ap.add_argument("--last-page", type=int, default=None, help="last page of a range (1-based, inclusive)")
     ap.add_argument("--force", action="store_true", help="rebuild even if pages.json exists")
     args = ap.parse_args()
 
@@ -117,7 +124,7 @@ def main() -> int:
 
     manifest = process(args.pdf, args.out, args.min_width, args.tile_ratio,
                        max(0.0, min(0.4, args.overlap)), args.dpi, args.quality,
-                       args.limit, args.force)
+                       args.limit, args.force, args.first_page, args.last_page)
     tiles = sum(len(p["tiles"]) for p in manifest["pages"])
     print(json.dumps({"pages": len(manifest["pages"]), "tiles": tiles,
                       "out": args.out}, ensure_ascii=False))
