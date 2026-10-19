@@ -285,6 +285,23 @@ agent 再按 `prompts/06-consistency-audit.md` 做六类语义判定：**年龄/
 
 ---
 
+## S6.9 · 成书闸门
+
+并行写多话时，写作 agent 的收尾写入会和成书抢同一个文件。**成书前必须过这道闸门**：
+
+```bash
+python scripts/check_ready.py --work . --check-qa
+# 退出码 0 才允许进入 S7
+```
+
+判据（任一不满足就拒绝）：
+
+1. 每一话都有 `draft.md`；
+2. `draft.md` 最后修改距今 ≥ `--quiet-minutes`（默认 10）——还在写就别急着拼；
+3. `--check-qa` 时 `qa.json` 存在且不早于 `draft.md`——防止用旧质检结果。
+
+`--require` 可以追加必备文件，例如 `--require draft.md outline.json page_script.json`。
+
 ## S7 · 成书与清理
 
 开口前先统一引号（台版/日式原稿常用「」，正文要求“”）：

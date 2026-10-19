@@ -48,8 +48,13 @@ python scripts/build_manifest.py --help
 | S5 | 写正文：**逐场打开页脚本写**，读 style.md | agent + `prompts/03-prose.md` | `draft.md` |
 | S6 | 质检：台词覆盖 + 事件完整性 + **沉浸检查** + 抽象句比例 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
 | S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
+| **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期 | `python scripts/check_ready.py --work . --check-qa` | 退出码 0 才继续 |
 | S7 | 统一引号 → 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/normalize_quotes.py` → `python scripts/assemble.py` | `book.*` |
 | S8 | 清理中间页图 | `python scripts/clean_pages.py --work .` | 释放磁盘 |
+
+> **S6.9 不可跳过。** 并行写多话时，写作 agent 的收尾写入会和成书抢同一个文件——
+> 实测出现过 4 次"成书后又被改写"，每次都靠人工比对 mtime 才发现。
+> `check_ready.py` 把这个判断变成一条命令：缺文件、还在改、质检过期，任一命中就拒绝成书。
 
 **全局层与局部层是并列的，不能互相替代**：`spine.md` 管"全书不矛盾"，
 `page_script.json` 管"每一页都在场"，章节 1:1 管"完整还原"。详见 `references/global-local.md`。
