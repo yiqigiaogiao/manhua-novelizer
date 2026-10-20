@@ -54,6 +54,7 @@ python scripts/build_manifest.py --help
 | **S6.8** | **覆盖闸门**：源里几话，就必须有几话写完、几话出书 | `python scripts/check_coverage.py --map chapter-map.csv --work . --books 出书目录` | 退出码 0 才继续 |
 | **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期、覆盖完整 | `python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv` | 退出码 0 才继续 |
 | S7 | 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/assemble.py --chapter-map chapter-map.csv` | `book.*` |
+| **S8** | **全本合并**：把各卷合成一部完整小说（含跨卷对账） | `python scripts/merge_books.py --books 出书目录 --out 全本 --formats md docx epub` | `全本.*` |
 | S8 | 清理中间页图 | `python scripts/clean_pages.py --work .` | 释放磁盘 |
 
 > **S6.9 不可跳过。** 并行写多话时，写作 agent 的收尾写入会和成书抢同一个文件——
@@ -70,6 +71,18 @@ python scripts/build_manifest.py --help
 > 源里本来就有单话目录时（`第06话`…`第78话`），话号是现成的，不用声明。
 > **另外：整卷并不等于全部话。** 有的作品整卷只到话 70，剩下的 71–78 只以单话形式存在——
 > 不看源目录结构就以为"卷数×5=话数"，必然漏。
+
+> **S8 全本合并的关键是"怎么从 book.md 里把话切回来"。**
+> 三个实测过的坑，`merge_books.py` 全部规避：
+> 1. **不能按 `---` 切**——正文里大量用 `---` 做分场线，会把一话拦腰切成两块
+>    （第04卷第17话、第15卷第76话都中招），块数与 stats.csv 对不上。
+> 2. **不能把每个 `## ` 都当章节**——正文小节也用 `## `
+>    （第04卷第19话的「一/二/三」分节、月刊番外的「## 篇名」）。
+>    正确做法是拿**目录标题做锚点**：目录第 N 项的标题在正文块里按序定位，
+>    两个锚点之间的所有块（含小节）都归该话。
+> 3. **锚点匹配要做繁简归一**——stats.csv 可能写「前日譚」（繁），
+>    book.md 块首是「前日谭」（简），逐字比较失败会让整个锚点机制放弃。
+> `merge_books.py` 对账不过（块数对不上、跨卷重复）会**拒绝合并**，宁可报错也不悄悄丢话。
 
 **全局层与局部层是并列的，不能互相替代**：`spine.md` 管"全书不矛盾"，
 `page_script.json` 管"每一页都在场"，章节 1:1 管"完整还原"。详见 `references/global-local.md`。

@@ -73,6 +73,11 @@ python scripts/check_ready.py --work work --check-qa --chapter-map work/chapter-
 # 6) 成书（给了 chapter-map 就先过覆盖闸门，覆盖不全拒绝出书）
 python scripts/assemble.py --work work --out work/build --title "书名" \
     --chapter-map work/chapter-map.csv --cleanup
+
+# 7) 全本合并：把已出的各卷（含番外）合成一部完整小说
+python scripts/merge_books.py --books 出书目录 --out 全本 \
+    --title "书名" --formats md docx epub
+#   对账不过（章节数对不上 / 跨卷重复）会拒绝合并，不会悄悄丢话
 ```
 
 ## 七项要求的落点

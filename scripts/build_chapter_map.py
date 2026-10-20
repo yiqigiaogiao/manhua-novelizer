@@ -251,7 +251,28 @@ def summarize(rows: list[dict]) -> dict:
     }
 
 
-def run(src: str, out: str, volumes_spec: str) -> dict:
+def parse_range(spec: str) -> set[int]:
+    """'60-64,78' -> {60,61,62,63,64,78}"""
+    out: set[int] = set()
+    for piece in spec.split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        if "-" in piece:
+            a, b = piece.split("-", 1)
+            lo, hi = to_int(a), to_int(b)
+            if lo is None or hi is None:
+                raise ValueError(f"话号读不出来：{piece!r}")
+            out.update(range(lo, hi + 1))
+        else:
+            v = to_int(piece)
+            if v is None:
+                raise ValueError(f"话号读不出来：{piece!r}")
+            out.add(v)
+    return out
+
+
+def run(src: str, out: str, volumes_spec: str, only: str = "") -> dict:
     chapter_rows, volume_rows = scan_source(src)
     mapping = read_volume_map(src)
     if volumes_spec:
@@ -268,6 +289,11 @@ def run(src: str, out: str, volumes_spec: str) -> dict:
         v["notes"] = "未展开为话（用 --volumes 声明覆盖范围）"
         merged.append(v)
 
+    if only:
+        wanted = parse_range(only)
+        merged = [r for r in merged
+                  if r["kind"] == "extra" or r["chapter"] in wanted]
+
     merged.sort(key=lambda r: (r["kind"] == "volume", r["kind"] == "extra", r["chapter"]))
     write_map(merged, out)
     return summarize(merged)
@@ -279,11 +305,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="chapter-map.csv")
     ap.add_argument("--volumes", default="",
                     help="整卷覆盖的话号，如 '1:1-5,2:6-10'")
+    ap.add_argument("--only", default="",
+                    help="只输出这些话，如 '60-64'（分卷出书时用）")
     args = ap.parse_args(argv)
     if not os.path.isdir(args.src):
         ap.error(f"not a directory: {args.src}")
     try:
-        summary = run(args.src, args.out, args.volumes)
+        summary = run(args.src, args.out, args.volumes, args.only)
     except ValueError as e:
         print(json.dumps({"error": str(e)}, ensure_ascii=False))
         return 1
