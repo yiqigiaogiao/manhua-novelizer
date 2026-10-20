@@ -57,7 +57,8 @@ def check_one(path: str) -> dict:
     if not n:
         return {"file": path, "fail": True, "problems": [{"level": "fail", "msg": "正文为空"}]}
 
-    is_dialog = ["\u201c" in p for p in paras]
+    # 认 U+201C（全角“”）与 U+300C（角括号「」），避免「」稿被判成叙述段 → 假绿灯
+    is_dialog = [any(c in p for c in "\u201c\u300c") for p in paras]
     n_dialog = sum(is_dialog)
     n_narr = n - n_dialog
     narr_ratio = n_narr / n
@@ -102,7 +103,8 @@ def check_one(path: str) -> dict:
             problems.append((level, f"{name}：{sorted(set(hits))[:5]}"))
     n_bad = len(BAD_QUOTES.findall(body))
     if n_bad:
-        problems.append(("fail", f"存在「」『』{n_bad} 处"))
+        # 引号规范化属于 S7（normalize_quotes），此处不阻断流程，仅提示
+        problems.append(("warn", "存在角引号 " + str(n_bad) + " 处，引号在 S7 由 normalize_quotes 规范化；此处不阻断流程"))
 
     return {
         "file": os.path.basename(os.path.dirname(path)) or os.path.basename(path),

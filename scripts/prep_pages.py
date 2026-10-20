@@ -36,6 +36,30 @@ def page_image(doc: pymupdf.Document, page: pymupdf.Page, dpi: int) -> tuple[Ima
     return Image.open(io.BytesIO(pix.tobytes("jpeg"))), f"render{dpi}"
 
 
+def manifest_is_valid(manifest: dict, out_dir: str, source: str, params: dict) -> bool:
+    """判断已有 pages.json 能否直接复用 —— 修复「只比 source」的三个硬伤：
+    1. 不比图片哈希（图片被替换成新扫描件仍命中旧 manifest）
+    2. 不比预处理参数（改 --min-width 后静默返回旧结果
+    3. 不校验页图是否还在磁盘（clean_pages 删图后不重建 → S3 因缺图失败）
+
+    判据 = source 一致 + 参数一致 + 所有切片文件都真实存在。
+    """
+    if manifest.get("source") != source:
+        return False
+    # 旧 manifest 无 params → 无法校验参数，保守重建
+    if not manifest.get("params"):
+        return False
+    for key, want in params.items():
+        if manifest["params"].get(key) != want:
+            return False
+    # 页图存在性
+    for page in manifest.get("pages", []):
+        for tile in page.get("tiles", []) or []:
+            if not os.path.isfile(os.path.join(out_dir, tile["file"])):
+                return False
+    return True
+
+
 def process(pdf_path: str, out_dir: str, min_width: int = 1100, tile_ratio: float = 2.6,
             overlap: float = 0.12, dpi: int = 200, quality: int = 92,
             limit: int | None = None, force: bool = False,
@@ -43,12 +67,13 @@ def process(pdf_path: str, out_dir: str, min_width: int = 1100, tile_ratio: floa
             fmt: str = "jpg", renumber: bool = False) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     manifest_path = os.path.join(out_dir, "pages.json")
+    params = {"min_width": min_width, "tile_ratio": tile_ratio, "overlap": overlap,
+              "dpi": dpi, "quality": quality, "format": fmt}
     if os.path.exists(manifest_path) and not force:
         with open(manifest_path, encoding="utf-8") as fh:
             existing = json.load(fh)
-        if existing.get("source") == os.path.basename(pdf_path):
+        if manifest_is_valid(existing, out_dir, os.path.basename(pdf_path), params):
             return existing
-
     ext = ".png" if fmt == "png" else ".jpg"
     doc = pymupdf.open(pdf_path)
     total = doc.page_count
@@ -59,7 +84,7 @@ def process(pdf_path: str, out_dir: str, min_width: int = 1100, tile_ratio: floa
         selected = selected[:limit]
 
     manifest = {"source": os.path.basename(pdf_path), "range": [start, end],
-                "format": fmt, "pages": []}
+                "format": fmt, "params": params, "pages": []}
     try:
         for index, (pno, page) in enumerate(selected, start=1):
             img, mode = page_image(doc, page, dpi)

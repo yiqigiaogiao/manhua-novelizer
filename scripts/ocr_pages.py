@@ -154,6 +154,8 @@ def main(argv=None) -> int:
     ap.add_argument("--merge-vertical", action="store_true",
                     help="竖排列聚类合并（有跨气泡误合并风险，须人工核对）")
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--start-page", type=int, default=1,
+                    help="断点续跑：只跑 start-page 及之后、且未完成的页（默认 1）")
     args = ap.parse_args(argv)
 
     files = sorted(glob.glob(os.path.join(args.pages, "p*.[jJ][pP][gG]")))
@@ -167,8 +169,21 @@ def main(argv=None) -> int:
     engine = load_engine(args.engine)
     from PIL import Image
 
-    pages = []
-    for path in files:
+    # 断点续跑：读已有 ocr.json，只补缺失页。修复"第 90 页崩 → 前 89 页全丢"。
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
+    existing = []
+    if os.path.isfile(args.out):
+        try:
+            with open(args.out, encoding="utf-8") as fh:
+                existing = json.load(fh).get("pages", []) or []
+        except Exception:
+            existing = []
+    done = {p.get("page") for p in existing}
+    pages = list(existing)
+    # 只跑 start-page 之后、且未完成的页
+    todo = [f for f in files if int(os.path.basename(f)[1:5]) >= args.start_page
+            and int(os.path.basename(f)[1:5]) not in done]
+    for path in todo:
         with Image.open(path) as img:
             width, height = img.size
         raw = run_rapidocr(engine, path) if args.engine == "rapidocr" else run_paddle(engine, path)
@@ -182,12 +197,17 @@ def main(argv=None) -> int:
         pages.append(entry)
         print(f"{os.path.basename(path)} lines={len(lines)} coverage={entry['coverage']}",
               file=sys.stderr)
+        # 每页落盘一次，崩溃不丢
+        pages.sort(key=lambda p: p.get("page", 0))
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump({"pages": pages, "engine": args.engine, "direction": args.direction},
+                      fh, ensure_ascii=False, indent=1)
 
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
+    pages.sort(key=lambda p: p.get("page", 0))
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump({"pages": pages, "engine": args.engine, "direction": args.direction},
                   fh, ensure_ascii=False, indent=1)
-    print(json.dumps({"pages": len(pages), "out": args.out,
+    print(json.dumps({"pages": len(pages), "new_pages": len(todo), "out": args.out,
                       "avg_coverage": round(sum(p["coverage"] for p in pages) / max(len(pages), 1), 3)},
                      ensure_ascii=False))
     return 0
