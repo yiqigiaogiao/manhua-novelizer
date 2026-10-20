@@ -20,6 +20,10 @@ def read_text(path: str) -> str:
 
 
 def split_front_matter(text: str) -> tuple[dict, str]:
+    # BOM 会让 startswith("---") 判断失败，导致整份 front matter 解析不到
+    # （实测：sidonia_v6 ch001/ch002 带 BOM，话号退化成 9999.0）
+    if text.startswith("\ufeff"):
+        text = text[1:]
     if not text.startswith("---"):
         return {}, text
     parts = text.split("---", 2)
