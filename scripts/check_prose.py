@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--bible", default=None)
     ap.add_argument("--out", default=None)
     ap.add_argument("--min-coverage", type=float, default=1.0,
-                    help="台词覆盖合格线，默认 1.0（对白必须 100% 落地）")
+                    help="台词覆盖合格线，默认 1.0（对白必须 100%% 落地）")
     ap.add_argument("--match-ratio", type=float, default=0.8)
     args = ap.parse_args(argv)
     qa = run(args.draft, args.outline, args.bible, args.out, args.min_coverage, args.match_ratio)

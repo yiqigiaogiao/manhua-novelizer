@@ -35,6 +35,7 @@ python scripts/build_manifest.py --help
 | 阶段 | 做什么 | 命令 / 执行者 | 产物 |
 |---|---|---|---|
 | S0 | 建清单：解析文件名、上/中/下去重、剔非正文 | `python scripts/build_manifest.py --dir pdf` | `manifest.csv` |
+| **S0c** | **话级覆盖清单**：登记源里**每一话**（及每一卷、每一篇番外） | `python scripts/build_chapter_map.py --src 源目录 --out chapter-map.csv --volumes "1:1-5,2:6-10"` | `chapter-map.csv` |
 | S0b | 合本拆章：按书签或页表切分 | `python scripts/split_book.py --pdf book.pdf --out chapters` | `chNNN_*.pdf` |
 | S1 | 拆页：原生图抽取、长条切片、低清放大、jpg/png；也支持图片目录与**双页扫描拆分** | `python scripts/prep_pages.py --pdf x.pdf --out ch001/pages`<br>`python scripts/prep_pages.py --images 卷目录 --out ch001/pages --split-spread --direction rtl` | `pages/p0001.jpg` |
 | S1.5 | **阅读顺序**：左起 / 右起 / 条漫，可人工覆盖 | `python scripts/detect_order.py --pages ch001/pages` | 写入 `config.json` |
@@ -50,21 +51,44 @@ python scripts/build_manifest.py --help
 | **S6.1** | **统一引号**：`「」→“”`（在 S6.2 之前，否则 check_immersion 对「」稿给假绿灯） | `python scripts/normalize_quotes.py --work .` | 原地改写 draft |
 | **S6.2** | **沉浸质检**：表情/动作密度、纯对白连排、概括句 | `python scripts/check_immersion.py --work .` | 退出码 0 才继续 |
 | S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
-| **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期 | `python scripts/check_ready.py --work . --check-qa` | 退出码 0 才继续 |
-| S7 | 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/assemble.py` | `book.*` |
+| **S6.8** | **覆盖闸门**：源里几话，就必须有几话写完、几话出书 | `python scripts/check_coverage.py --map chapter-map.csv --work . --books 出书目录` | 退出码 0 才继续 |
+| **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期、覆盖完整 | `python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv` | 退出码 0 才继续 |
+| S7 | 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/assemble.py --chapter-map chapter-map.csv` | `book.*` |
 | S8 | 清理中间页图 | `python scripts/clean_pages.py --work .` | 释放磁盘 |
 
 > **S6.9 不可跳过。** 并行写多话时，写作 agent 的收尾写入会和成书抢同一个文件——
 > 实测出现过 4 次"成书后又被改写"，每次都靠人工比对 mtime 才发现。
 > `check_ready.py` 把这个判断变成一条命令：缺文件、还在改、质检过期，任一命中就拒绝成书。
 
+> **S6.8 更不可跳过：它拦的是"整本少话"这种最贵的漏。**
+> `check_ready.py` 只检查 **work 里已经存在** 的 `ch*`——源里压根没建目录的话，
+> 不会变成任何一条 problem，闸门一路全绿，最后少掉十几话才发现。
+> 实测：整本 78 话只写了 60 话，闸门每次都报 ready。
+> 根因是没有任何一步拿 **源** 当基准。S0c 的 `chapter-map.csv` 就是这个基准，
+> S6.8 拿它对账，缺一话就红。
+> 源里整卷含多话时，用 `--volumes "1:1-5,2:6-10"` 声明每卷覆盖哪些话；
+> 源里本来就有单话目录时（`第06话`…`第78话`），话号是现成的，不用声明。
+> **另外：整卷并不等于全部话。** 有的作品整卷只到话 70，剩下的 71–78 只以单话形式存在——
+> 不看源目录结构就以为"卷数×5=话数"，必然漏。
+
 **全局层与局部层是并列的，不能互相替代**：`spine.md` 管"全书不矛盾"，
 `page_script.json` 管"每一页都在场"，章节 1:1 管"完整还原"。详见 `references/global-local.md`。
 
 **光有具体场景不等于小说。** 实测发现：逐页忠实、台词 100% 覆盖的稿子，
 仍可能"只是把场景描写搬上台"——含对白的段落里 **89–99% 没有任何表情或动作穿插**，
-人物只有台词没有脸，场景之间没有推力。这是 AI 味的另一个主要来源，
-由 S4 的 `hook_in`/`hook_out` 与 S5 的表情穿插共同负责，S6.2 负责拦住。
+人物只有台词没有脸，场景之间没有推力。这是 AI 味的另一个主要来源。
+
+**但解法不是加配额。** 早期版本要求"动作段 ≥35%""每 300 字一处微动作"，
+结果稿件被填满编出来的手指、喉结和肩膀——**这本身也是 AI 味，而且更糟**。
+现在改成两条无配额规则：
+
+- **表情/神态：有依据才写。** 页脚本写了就写，没写就别编；
+  写出来的每个动作都要能回到页脚本找到出处，找不到就删。
+- **因果：每场结束时，处境必须和开场时不一样。** 用一个具体的现场细节
+  把这一场接到上一场的后果上，而不是用叙述句做连接。
+
+由 S4 的 `hook_in`/`hook_out` 与 S5 的因果链、表情依据规则共同负责，
+S6.2 负责拦住元语言与概括句。
 
 细节见 `references/pipeline.md`；改编原则见 `references/principles.md`；风格配置见 `references/style-config.md`；
 **省钱方案（OCR / 本地模型 / 分级）见 `references/cheap-vision.md`**。
@@ -102,9 +126,10 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 
 | 检查 | 合格线 | 谁做 |
 |---|---|---|
-| 台词覆盖（原文对白逐字落地） | ≥ 95% | `python scripts/check_prose.py` |
+| 台词覆盖（原文对白逐字落地） | **100%**（`--min-coverage` 默认 1.0） | `python scripts/check_prose.py` |
 | 事件完整性（beats 是否落地） | 无关键遗漏 | agent |
 | 忠实度（抽 3 页对照原图） | 无编造 | agent |
+| **话级覆盖（源里几话都写了、都出书了）** | **无缺失、无重复** | `python scripts/check_coverage.py` |
 | 一致性（年龄/建模/死亡/时间线） | 0 error | `python scripts/check_consistency.py` |
 
 **没有字数线，没有禁词线。**
@@ -115,7 +140,8 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 <work>/
 ├─ pdf/ 或 book.pdf
 ├─ chapters/                 S0b 产物
-├─ manifest.csv
+├─ manifest.csv              S0（文件级）
+├─ chapter-map.csv           S0c（话级：源里到底有几话）★覆盖闸门的基准
 ├─ style.json  style.md  style_history/    S-1
 ├─ bible.md  glossary.csv                  S2
 ├─ refs.md   claims.csv                    S2.5
@@ -139,3 +165,8 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 - **同名不同世**：跨时代角色用 `名(时代)` 作主键。
 - **跨叙事层误报**：回忆/往事要给 `state.timeline = "flashback"`，否则死亡与年龄检查会误判。
 - **别用字数判断好坏**：写得短可能是原作就短；写得长可能是把留白填满了。
+- **路径里带方括号会打瞎 glob**：中文下载目录常见「【完】」「[扫描]」这类名字，
+  `glob`/`fnmatch` 会把方括号当字符类，一条都匹配不到。脚本里用
+  `_shared.list_dirs()`（`os.scandir` + 字面前后缀），不要用 `glob`。
+- **整卷 ≠ 全部话**：先看源目录结构再估总量。有的作品整卷只到话 70，
+  剩下的只以单话目录存在。用 S0c 登记，别用"卷数×5"去猜。

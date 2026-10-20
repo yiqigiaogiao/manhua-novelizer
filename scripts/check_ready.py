@@ -15,12 +15,15 @@ import argparse
 import glob
 import json
 import os
+import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _shared import list_dirs  # noqa: E402
 
 
 def collect_chapters(work: str) -> list[str]:
-    dirs = [d for d in glob.glob(os.path.join(work, "ch*")) if os.path.isdir(d)]
-    return sorted(dirs)
+    return list_dirs(work, prefix="ch")
 
 
 def main(argv=None) -> int:
@@ -32,6 +35,8 @@ def main(argv=None) -> int:
                     help="每话必须具备的文件（默认 draft.md）")
     ap.add_argument("--check-qa", action="store_true",
                     help="要求 qa.json 存在且不早于 draft.md")
+    ap.add_argument("--chapter-map", default=None,
+                    help="话级覆盖清单 chapter-map.csv；给了就核对「源里几话都写了吗」")
     args = ap.parse_args(argv)
 
     chapters = collect_chapters(args.work)
@@ -67,12 +72,30 @@ def main(argv=None) -> int:
                 elif os.path.getmtime(qa) < os.path.getmtime(draft):
                     problems.append(f"{name}: qa.json 早于 draft.md，质检过期")
 
+    coverage = None
+    if args.chapter_map:
+        import check_coverage
+        expected, _ = check_coverage.load_map(args.chapter_map)
+        work_map = check_coverage.work_chapters(args.work)
+        missing = sorted(ch for ch in expected if ch not in work_map)
+        no_draft = sorted(ch for ch, ok in work_map.items() if not ok and ch in expected)
+        for ch in missing:
+            problems.append(f"第{ch}话: 源清单里有，work 里却没有 ch{ch:03d}（整本会少这一话）")
+        for ch in no_draft:
+            problems.append(f"第{ch}话: ch{ch:03d} 没有 draft.md")
+        coverage = {
+            "expected": len(expected),
+            "have_draft": len(expected) - len(missing) - len(no_draft),
+            "missing": missing,
+        }
+
     ready = not problems
     report = {
         "ready": ready,
         "chapters": len(chapters),
         "quiet_minutes_required": args.quiet_minutes,
         "newest_draft_age_min": round((now - newest) / 60, 1) if newest else None,
+        "coverage": coverage,
         "problems": problems,
     }
     print(json.dumps(report, ensure_ascii=False, indent=1))

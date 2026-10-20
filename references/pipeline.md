@@ -29,6 +29,38 @@ python scripts/build_manifest.py --dir pdf --out manifest.csv
 
 ---
 
+## S0c · 话级覆盖清单
+
+**输入**：一个装满"各话 / 各卷"图片子目录的源目录。
+**输出**：`chapter-map.csv`。
+
+```bash
+# 源里已经有单话目录（第06话…第78话）时，话号是现成的
+python scripts/build_chapter_map.py --src 源目录 --out chapter-map.csv
+
+# 源里是整卷（每卷含多话）时，声明每卷覆盖哪些话
+python scripts/build_chapter_map.py --src 源目录 --out chapter-map.csv \
+    --volumes "1:1-5,2:6-10,3:11-15"
+# 也可以把同样的声明写进源目录的 volume-map.csv
+```
+
+产物列：`chapter, title, kind, source, pages, notes`。
+`kind` = `chapter`（正篇话）/ `extra`（番外、前日谭、月刊）/ `volume`（整卷未展开）。
+
+**为什么必须做这一步**：`build_manifest.py` 只登记 PDF 文件；
+`check_ready.py` 只检查 **work 里已经存在** 的 `ch*`。
+源里没建目录的话 → 没有 ch 目录 → 没有 problem → 闸门全绿 → 成书少十几话。
+实测：整本 78 话只写了 60 话，闸门每次都报 ready。
+S0c 就是那个"以源为基准"的产物。
+
+**卡点**：`gaps_in_range` 非空说明话号有洞；`volumes_unexpanded` 非空说明有整卷没声明覆盖范围，
+两种都要先补声明再往下走。
+
+**注意：整卷 ≠ 全部话。** 有的作品整卷只到话 70，剩下的 71–78 只以单话目录存在。
+先看源目录结构再估总量，别用"卷数 × 5"去推。
+
+---
+
 ## S0b · 合本 PDF 拆章
 
 一册装几十话、或"完本"PDF 时，先拆章，再进 S0/S1：
@@ -333,12 +365,32 @@ python scripts/check_immersion.py --work .
 
 ---
 
+## S6.8 · 覆盖闸门
+
+**它拦的是"整本少话"这种最贵的漏。** 必须过：
+
+```bash
+python scripts/check_coverage.py --map chapter-map.csv --work . --books 出书目录
+# 退出码 0 才允许成书
+```
+
+判据：
+
+1. 源清单（`chapter-map.csv`）里的**每一话**，work 里都有对应的 `draft.md`；
+2. 每一话都已经在某一卷里出过书（`stats.csv` 的 chapter 列能对上）；
+3. 没有哪一话在两卷里重复出现；
+4. work 里没有清单之外的"孤儿话"（多写的，或清单没登记）。
+
+话号取自 `draft.md` 的 front matter（`话: 60`），不是目录名 `ch001`。
+
+---
+
 ## S6.9 · 成书闸门
 
 并行写多话时，写作 agent 的收尾写入会和成书抢同一个文件。**成书前必须过这道闸门**：
 
 ```bash
-python scripts/check_ready.py --work . --check-qa
+python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv
 # 退出码 0 才允许进入 S7
 ```
 
@@ -346,7 +398,8 @@ python scripts/check_ready.py --work . --check-qa
 
 1. 每一话都有 `draft.md`；
 2. `draft.md` 最后修改距今 ≥ `--quiet-minutes`（默认 10）——还在写就别急着拼；
-3. `--check-qa` 时 `qa.json` 存在且不早于 `draft.md`——防止用旧质检结果。
+3. `--check-qa` 时 `qa.json` 存在且不早于 `draft.md`——防止用旧质检结果；
+4. `--chapter-map` 时，源清单里的每一话都有 `draft.md`（覆盖不完整直接拒绝）。
 
 `--require` 可以追加必备文件，例如 `--require draft.md outline.json page_script.json`。
 
@@ -360,13 +413,15 @@ python scripts/normalize_quotes.py --work .           # 改「」→“”、『
 ```
 
 ```bash
-python scripts/assemble.py --work . --out build --title "书名" --cleanup
+python scripts/assemble.py --work . --out build --title "书名" \
+    --chapter-map chapter-map.csv --cleanup
 ```
 
 - 读所有 `ch*/draft.md` 的 front matter，按话号排序。
 - 导出 `build/book.md`、`book.docx`（需 python-docx）、`book.epub`、`book.mobi`（内置写出器，不依赖 calibre）。
 - 生成 `cover.png`（优先用第一话首页，没有页图时画标题卡）。
 - `stats.csv`：每话字数；`index.csv`：每话场景与人物。
+- `--chapter-map` 给了就**先过覆盖闸门**，覆盖不全拒绝成书（比出完再发现少话便宜得多）。
 - `--cleanup` 或 `python scripts/clean_pages.py --work .` 删除中间页图（jpg/png），`--keep` 可保留某一话。
 
 ---

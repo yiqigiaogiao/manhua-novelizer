@@ -70,6 +70,45 @@ def read_text(path: str) -> str:
         return fh.read()
 
 
+def list_dirs(path: str, prefix: str = "", suffix: str = "") -> list[str]:
+    """列出子目录，按字面前后缀过滤。
+
+    不要用 glob/fnmatch：路径里只要带方括号（中文下载目录常见
+    「【完】」「[扫描]」这类），fnmatch 会把方括号当字符类，
+    结果一条都匹配不到。实测 `glob.glob(path + '/*')` 在
+    `…\【完】[…]\小説\` 下返回空列表，而 os.scandir 正常。
+    """
+    out = []
+    try:
+        entries = list(os.scandir(path))
+    except OSError:
+        return out
+    for e in entries:
+        if not e.is_dir():
+            continue
+        if prefix and not e.name.startswith(prefix):
+            continue
+        if suffix and not e.name.endswith(suffix):
+            continue
+        out.append(e.path)
+    return sorted(out)
+
+
+def list_files(path: str, suffix: str = "") -> list[str]:
+    out = []
+    try:
+        entries = list(os.scandir(path))
+    except OSError:
+        return out
+    for e in entries:
+        if not e.is_file():
+            continue
+        if suffix and not e.name.endswith(suffix):
+            continue
+        out.append(e.path)
+    return sorted(out)
+
+
 def split_front_matter(text: str) -> tuple[dict, str]:
     if not text.startswith("---"):
         return {}, text

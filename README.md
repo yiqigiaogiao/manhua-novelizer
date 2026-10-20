@@ -43,6 +43,12 @@ python scripts/build_manifest.py --dir pdf --out work/manifest.csv
 python scripts/prep_pages.py --pdf "pdf/001.pdf" --out work/ch001/pages
 python scripts/split_book.py --pdf book.pdf --out chapters      # 一册几十话时
 
+# 1b) 话级覆盖清单（源里有几话，就登记几话）★ 覆盖闸门的基准
+python scripts/build_chapter_map.py --src 源目录 --out work/chapter-map.csv
+#   源里是整卷时声明每卷覆盖哪些话：
+#   python scripts/build_chapter_map.py --src 源目录 --out work/chapter-map.csv \
+#       --volumes "1:1-5,2:6-10,3:11-15"
+
 # 2) 阅读顺序（拆页之后、转录之前）
 python scripts/detect_order.py --pages work/ch001/pages --work work
 python scripts/detect_order.py --set rtl --work work
@@ -59,7 +65,14 @@ python scripts/style_config.py --action check --work work       # 未确认/有�
 # 5) 质检 / 审计 / 成书 / 清理
 python scripts/check_prose.py --draft work/ch001/draft.md --outline work/ch001/outline.json --bible work/bible.md
 python scripts/check_consistency.py --work work --bible work/bible.md --out work/audit/consistency.md
-python scripts/assemble.py --work work --out work/build --title "书名" --cleanup
+
+# 5b) 覆盖闸门：源里几话都写了、都出书了？缺一话就红
+python scripts/check_coverage.py --map work/chapter-map.csv --work work --books 出书目录
+python scripts/check_ready.py --work work --check-qa --chapter-map work/chapter-map.csv
+
+# 6) 成书（给了 chapter-map 就先过覆盖闸门，覆盖不全拒绝出书）
+python scripts/assemble.py --work work --out work/build --title "书名" \
+    --chapter-map work/chapter-map.csv --cleanup
 ```
 
 ## 七项要求的落点
@@ -131,9 +144,10 @@ python scripts/clean_pages.py --work work --keep work/ch001/pages
 
 | 检查 | 合格线 | 谁做 |
 |---|---|---|
-| 台词覆盖（原文对白逐字落地） | ≥ 95% | `scripts/check_prose.py` |
+| 台词覆盖（原文对白逐字落地） | **100%** | `scripts/check_prose.py` |
 | 事件完整性（beats 是否落地） | 无关键遗漏 | agent |
 | 忠实度（抽 3 页对照原图） | 无编造 | agent |
+| **话级覆盖（源里几话都写了、都出书了）** | **无缺失、无重复** | `scripts/check_coverage.py` |
 | 一致性（年龄/建模/死亡/时间线） | 0 error | `scripts/check_consistency.py` |
 
 **没有字数线，没有禁词线。**
@@ -146,6 +160,13 @@ python scripts/clean_pages.py --work work --keep work/ch001/pages
 - **低清页**：宽 < 1000 px 放大到 1100+ 再识读。
 - **跨叙事层误报**：回忆/往事给 `state.timeline = "flashback"`，否则死亡与年龄检查会误判。
 - **别用字数判断好坏**：写得短可能是原作就短；写得长可能是把留白填满了。
+- **整卷 ≠ 全部话**：有的作品整卷只到话 70，剩下的 71–78 只以单话目录存在。
+  先用 `build_chapter_map.py` 登记源里到底有几话，别用"卷数 × 5"去推。
+- **闸门只查 work 目录会漏**：没建目录的话不会变成 problem，闸门一路全绿。
+  必须用 `check_coverage.py --map chapter-map.csv` 拿源当基准对账。
+- **路径里带方括号会打瞎 glob**：中文下载目录常见「【完】」「[扫描]」，
+  `glob`/`fnmatch` 把方括号当字符类，一条都匹配不到。脚本里用
+  `_shared.list_dirs()`（`os.scandir` + 字面前后缀），不要用 `glob`。
 
 ## License
 

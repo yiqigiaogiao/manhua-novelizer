@@ -182,9 +182,49 @@ def write_tables(items: list[dict], out_dir: str) -> None:
                 w.writerow([ch, "character", c])
 
 
+def coverage_gate(work: str, chapter_map: str,
+                  only: list[str] | None = None) -> dict | None:
+    """覆盖闸门：源清单里的每一话都写了吗？漏了就拒绝对书。
+
+    返回 None 表示通过；否则返回问题详情。
+    """
+    import check_coverage
+
+    expected, _ = check_coverage.load_map(chapter_map)
+    if not expected:
+        return {"error": "清单里没有 kind=chapter 的行"}
+
+    def as_int(v):
+        try:
+            return int(float(str(v).strip()))
+        except (TypeError, ValueError):
+            return None
+
+    work_map = check_coverage.work_chapters(work)
+    if only:
+        wanted = {as_int(x) for x in only} - {None}
+        expected = {ch: r for ch, r in expected.items() if ch in wanted}
+
+    missing = sorted(ch for ch in expected if ch not in work_map)
+    no_draft = sorted(ch for ch, ok in work_map.items() if not ok and ch in expected)
+    if not missing and not no_draft:
+        return None
+    return {
+        "expected": len(expected),
+        "missing_chapters": missing,
+        "chapters_without_draft": no_draft,
+        "hint": "用 scripts/check_coverage.py --map ... --work ... 看明细",
+    }
+
+
 def run(work: str, out: str, title: str = "漫画小说化",
         formats: list[str] | None = None, cover: bool = True,
-        only: list[str] | None = None) -> dict:
+        only: list[str] | None = None,
+        chapter_map: str | None = None) -> dict:
+    if chapter_map:
+        gate = coverage_gate(work, chapter_map, only)
+        if gate:
+            return {"error": "覆盖不完整，拒绝成书", "coverage": gate}
     items = collect(work)
     if only:
         # 话号在 meta 里可能是 int/str/float（6 / "6" / 6.0），统一按整数比较
@@ -243,8 +283,10 @@ if __name__ == "__main__":
     ap.add_argument("--no-cover", action="store_true")
     ap.add_argument("--chapters", nargs="*", default=None,
                     help="只导出指定话，例如 --chapters 1 2 3")
+    ap.add_argument("--chapter-map", default=None,
+                    help="话级覆盖清单 chapter-map.csv；给了就核对覆盖，覆盖不全拒绝成书")
     args = ap.parse_args()
     print(json.dumps(run(args.work, args.out, args.title, args.formats,
-                         not args.no_cover, args.chapters),
+                         not args.no_cover, args.chapters, args.chapter_map),
                      ensure_ascii=False, indent=1))
     sys.exit(0)
