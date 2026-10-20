@@ -43,19 +43,34 @@ python scripts/build_manifest.py --help
 | **S-0** | **全书脊柱**：低清通读全本，写主线/人物弧/时间线/母题/节奏表 | agent + `prompts/00b-spine.md` | `spine.md` |
 | S2 | 圣经：人物/势力/术法/地名/方言 | agent + `prompts/05-bible.md` | `bible.md` |
 | S2.5 | 联网考据 | agent + `prompts/07-web-research.md` | `refs.md` |
-| S3 | 页脚本：逐页识读成 JSON（**必经，不抽样**） | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
+| S3 | 页脚本：逐页识读成 JSON（**必经，不抽样**）。**每格必须记 `story_role`/`change`/`knows_after`/`beat`** —— 这是剧情语义，没有它下游必然写成场景串烧 | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
 | S3-alt | **廉价转录**：本地 OCR 出文字，文本模型整理（零视觉 token） | `python scripts/ocr_pages.py` + `prompts/01b-page-script-from-ocr.md` | `ocr.json` → `page_script.json` |
-| S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子**；beats 写因果链，每场带 `hook_in`/`hook_out` | agent + `prompts/02-chapter-outline.md` | `outline.json` |
-| S5 | 写正文：**逐场打开页脚本写**，读 style.md；**表情/微动作要对白之间穿插** | agent + `prompts/03-prose.md` | `draft.md` |
+| S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子**；beats 写因果链，每场带 `hook_in`/`hook_out`；**`reading` 剧情理解块必填**（S5 骨架 + S6.7 核对基准） | agent + `prompts/02-chapter-outline.md` | `outline.json` |
+| S5 | 写正文：先读 `outline.reading` 建立剧情理解，再逐场照 `change` 写 | agent + `prompts/03-prose.md` | `draft.md` |
 | S6 | 质检：**台词覆盖必须 100%**（`--min-coverage` 默认 1.0）+ 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
 | **S6.1** | **统一引号**：`「」→“”`（在 S6.2 之前，否则 check_immersion 对「」稿给假绿灯） | `python scripts/normalize_quotes.py --work .` | 原地改写 draft |
 | **S6.2** | **沉浸质检**：表情/动作密度、纯对白连排、概括句 | `python scripts/check_immersion.py --work .` | 退出码 0 才继续 |
+| **S6.7** | **原图复检**：拿还没删的页图逐场核对正文——抓"描述与画面不一致"和"原作画面表达力丢失" | agent + `prompts/07-image-verify.md` | `verify.json` |
+| **S6.75** | **按复检结论改写**：只改 `verify.json` 点到的问题，不做无关重写 | agent + `prompts/075-revise-from-verify.md` | 改 `draft.md` + 追加 `revisions` |
+| **S6.7b** | **复检闸门**：没 verify.json、没读原图、major/minor 未修订 → 拦住 | `python scripts/check_verify.py --work .` | 退出码 0 才继续 |
 | S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
 | **S6.8** | **覆盖闸门**：源里几话，就必须有几话写完、几话出书 | `python scripts/check_coverage.py --map chapter-map.csv --work . --books 出书目录` | 退出码 0 才继续 |
-| **S6.9** | **成书闸门**：所有话写完且静置 N 分钟、质检未过期、覆盖完整 | `python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv` | 退出码 0 才继续 |
+| **S6.9** | **成书闸门**：所有话写完、过复检、静置 N 分钟、质检未过期、覆盖完整 | `python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv` | 退出码 0 才继续 |
 | S7 | 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/assemble.py --chapter-map chapter-map.csv` | `book.*` |
 | **S8** | **全本合并**：把各卷合成一部完整小说（含跨卷对账） | `python scripts/merge_books.py --books 出书目录 --out 全本 --formats md docx epub` | `全本.*` |
-| S8 | 清理中间页图 | `python scripts/clean_pages.py --work .` | 释放磁盘 |
+| **S9** | **清理页图**：**确认完整后才下这个指令**。默认只报不删；`--confirm` 才真删 | `python scripts/clean_pages.py --work . --dry-run` → `--confirm` | 释放磁盘 |
+
+> **S6.7/S6.75 是治"粗糙"的正主，不是可选项。**
+> 实测：逐页忠实、台词 100% 覆盖的稿子仍然能走样——因为 S3/S4/S5 全程
+> 没有一步拿着原图和正文对着看。剧情理解靠 `reading` 重建、格间过渡靠
+> `change` 推断，两者都会失真，只有拿图核能发现。
+> 页脚本的原图在 S6.7 之前**不许删**（见 S9）。
+
+> **S9 的清理是显式人工动作，不再是流水线自动步。**
+> 页图是 S6.7 复检的事实源：删了，"描述与画面不一致"就永远没机会核对。
+> 所以 `clean_pages.py` **默认只报不删**，必须 `--confirm` 才真删；
+> `assemble.py` 成功后也不再自动清。
+> `--after-verify` 可只删已过复检的章，没过复检的章留着还能补核。
 
 > **S6.9 不可跳过。** 并行写多话时，写作 agent 的收尾写入会和成书抢同一个文件——
 > 实测出现过 4 次"成书后又被改写"，每次都靠人工比对 mtime 才发现。
@@ -103,6 +118,25 @@ python scripts/build_manifest.py --help
 由 S4 的 `hook_in`/`hook_out` 与 S5 的因果链、表情依据规则共同负责，
 S6.2 负责拦住元语言与概括句。
 
+**光有规则还不够，必须有一次拿图核对。** 上面这些规则都在"没有完整画面"的条件下执行：
+S3 记的是静态格、S4 重建因果、S5 照 change 推断过渡——每一环都会失真。
+实测最典型的三类走样：
+
+1. **描述与画面不一致**：正文写"把令牌拍在桌上"，画面上是"滑落、俯身去接"。
+   这不是文笔问题，实打实是事实错误，而 S6 的台词覆盖率、S6.2 的沉浸度都查不出来。
+2. **剧情理解偏差**：把一场"托付"读成"争执"，后面整章的情绪都跟着歪。
+   根因是 S3 只记了"画面里有什么"，没记"这一格让什么变了、谁知道了什么"。
+3. **原作表达力丢失**：原作末格用全景把代价压在构图上、一句台词都没有，
+   正文写成了"他低头看着裂纹"——那一格的力量没了。
+
+对应的三处改动：
+
+- **S3 增加剧情语义字段** `story_role` / `change` / `knows_after` / `beat`，让页脚本不再是静态照片。
+- **S4 增加 `reading` 剧情理解块**（这一话在讲什么、谁要什么、状态差了什么、
+  画面担当在哪），S5 必须先读它再动笔。
+- **S6.7 + S6.75 + S6.7b**：拿原图逐场核对正文，按结论定点改写，闸门拦住未核/未改的章。
+  **因此页图在 S6.7 之前不许删**（S9 改为显式人工确认）。
+
 细节见 `references/pipeline.md`；改编原则见 `references/principles.md`；风格配置见 `references/style-config.md`；
 **省钱方案（OCR / 本地模型 / 分级）见 `references/cheap-vision.md`**。
 
@@ -132,6 +166,15 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 
 - 成书格式：`md` / `docx` / `epub` / `mobi`（MOBI 由内置写出器生成，不依赖 calibre）+ `cover.png`。
 - 页图支持 `jpg`（默认）与 `png`：`python scripts/prep_pages.py --format png`。
+- **页图不自动删。** 成书后页图仍在 `chNNN/pages/`——它们是 S6.7 复检的依据，
+  也是你日后回头核对的唯一证据。确认全书无误后，再显式下清理指令：
+
+  ```bash
+  python scripts/clean_pages.py --work . --dry-run            # 先看会删多少、省多少
+  python scripts/clean_pages.py --work . --confirm            # 确认无误，真删
+  python scripts/clean_pages.py --work . --confirm --after-verify  # 只删过了复检的章
+  python scripts/clean_pages.py --work . --confirm --keep ch001/pages  # 留某一话
+  ```
 - **中间页图会占几百 MB 到几 GB**：`python scripts/assemble.py --cleanup` 或 `python scripts/clean_pages.py --work .` 一键删除；
   `--keep ch001/pages` 可保留某一话，`--dry-run` 先看会删多少。
 
@@ -156,17 +199,20 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 ├─ manifest.csv              S0（文件级）
 ├─ chapter-map.csv           S0c（话级：源里到底有几话）★覆盖闸门的基准
 ├─ style.json  style.md  style_history/    S-1
+├─ spine.md                                 S-0
 ├─ bible.md  glossary.csv                  S2
 ├─ refs.md   claims.csv                    S2.5
 ├─ config.json
 ├─ audit/consistency.md                    S6.5
 ├─ build/                    S7（book.md/docx/epub/mobi, cover.png）
 └─ ch001/
-   ├─ pages/                S1（用完可删）
+   ├─ pages/                S1（★ S6.7 原图复检完成后才允许删）
    ├─ page_script.json       S3
-   ├─ outline.json           S4（含 state）
+   ├─ outline.json           S4（含 state + reading）
    ├─ draft.md               S5
-   └─ qa.json                S6
+   ├─ qa.json                S6
+   ├─ verify.json            S6.7（图对文核对 + S6.75 的 revisions）
+   └─ digest.md              可选：分场摘要，供 S5 翻阅
 ```
 
 ## 常见坑

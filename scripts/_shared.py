@@ -24,7 +24,9 @@ DEFAULT_CONFIG = {
         "formats": ["md", "docx", "epub", "mobi"],
         "cover": True,
         "page_format": "jpg",
-        "cleanup_after_build": True,
+        # 页图是 S6.7 原图复检的事实源，成书后**不**自动删。
+        # 彻底核对完成后由人显式执行 `clean_pages.py --work . --confirm`。
+        "cleanup_after_build": False,
     },
 }
 

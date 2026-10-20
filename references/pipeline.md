@@ -365,7 +365,64 @@ python scripts/check_immersion.py --work .
 
 ---
 
-## S6.8 · 覆盖闸门
+## S6.7 · 原图复检（治"粗糙"的关键一步）
+
+**输入**：`draft.md` + `outline.json`（`reading`）+ `page_script.json` + `pages/pNNNN.jpg`
+**输出**：`verify.json`
+
+```bash
+# 由 agent 按 prompts/07-image-verify.md 执行，不是脚本
+```
+
+**为什么必须有这一步**：S3/S4/S5 全程没有一次拿着原图和正文对着看。
+剧情理解靠 `reading` 重建、格间过渡靠 `change` 推断，两者都会失真，
+而台词覆盖率与沉浸度都查不出"描述与画面不一致"。
+
+抽查四类页（不必全看）：
+
+1. `reading.state_change` 里每条变化对应的页；
+2. `change` 为 `turn` / `reveal` / `payoff` 的页；
+3. `reading.visual_punchline` 指的那页；
+4. 最近改过的段落对应的页。
+
+结论分两类：
+
+| 类别 | 字段 | 含义 |
+|---|---|---|
+| 一致性 | `consistency` + `drift[]` | 正文事件/动作/物件与画面不符。`major` 必改、`minor` 建议改、`trivia` 只记 |
+| 表达力 | `expression_preserved` | `lost` 原作画面表达点没了 / `thin` 写成了叙述者解释 / `ok` 还在 |
+
+`verify.json` 里还有 `pages_checked`——**没读过图的页不许报 ok**。
+
+---
+
+## S6.75 · 按复检结论改写
+
+**输入**：`verify.json`、`draft.md`
+**输出**：改 `draft.md`，追加 `verify.json` 的 `revisions`
+
+只改 `verify.json` 点到的问题，**不做无关重写**（反复替换已接受的文字会引入新不一致）。
+`drift` 向画面靠；`expression_*` 用原作已有的物件/位置/停顿承载，
+**不许用叙述者解释或抒情来补偿**。改完重跑 `check_prose.py`，覆盖率必须仍是 1.0。
+
+---
+
+## S6.7b · 复检闸门
+
+```bash
+python scripts/check_verify.py --work .
+python scripts/check_verify.py --work . --strict   # expression 未补也拦
+```
+
+拦住三种情况：
+
+1. 有 `draft.md` 却没有 `verify.json`（等于没核过图）；
+2. `pages_checked` 为空（没真读图）；
+3. `drift` 里 `major`/`minor` 的条目在 `revisions` 里找不到对应修订。
+
+`--strict` 额外拦 `expression_preserved` 为 `lost`/`thin` 但没有任何 `type=expression` 修订的场。
+
+---
 
 **它拦的是"整本少话"这种最贵的漏。** 必须过：
 
@@ -422,6 +479,7 @@ python scripts/assemble.py --work . --out build --title "书名" \
 - 生成 `cover.png`（优先用第一话首页，没有页图时画标题卡）。
 - `stats.csv`：每话字数；`index.csv`：每话场景与人物。
 - `--chapter-map` 给了就**先过覆盖闸门**，覆盖不全拒绝成书（比出完再发现少话便宜得多）。
+- **不再自动删页图**：删图是显式人工指令（见 S9），页图是 S6.7 复检的事实源。
 - `--cleanup` 或 `python scripts/clean_pages.py --work .` 删除中间页图（jpg/png），`--keep` 可保留某一话。
 
 ---
@@ -460,6 +518,26 @@ python scripts/merge_books.py --books 出书目录 --out build \
   锚点之间的块全部归该话。
 - 锚点匹配前做**繁简归一**（譚→谭 等），否则「前日譚/前日谭」这种
   一字之差会让整卷匹配失败。
+
+---
+
+## S9 · 清理页图（显式人工动作，**不是**流水线步）
+
+**页图在 S6.7 之前不许删。** 删了，"描述与画面不一致"就没有核对依据，
+只能靠记忆赌。所以清理是**最后一道由人确认的动作**：
+
+```bash
+python scripts/clean_pages.py --work . --dry-run                 # 先看会删多少、省多少
+python scripts/clean_pages.py --work . --confirm                 # 确认无误，真删
+python scripts/clean_pages.py --work . --confirm --after-verify  # 只删过了复检的章
+python scripts/clean_pages.py --work . --keep ch001/pages        # 留某一话
+```
+
+- **没 `--confirm` = 只报不删**（dry-run 与不带 confirm 的调用等价）。
+- `--after-verify` 读每话 `verify.json`：没过复检的章**不删**，留着还能补核。
+- `assemble.py` 成书成功后**不再自动清**（`output.cleanup_after_build` 默认已改 `false`）。
+- 删掉的只有 `*.jpg/*.png`；正文、`page_script.json`、`outline.json`、
+  `verify.json`、`qa.json` 全部保留——它们才是小说的档案。
 
 ---
 
