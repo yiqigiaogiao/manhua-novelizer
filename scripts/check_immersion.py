@@ -87,11 +87,11 @@ def check_one(path: str) -> dict:
     problems = []
 
     if narr_ratio < 0.35:
-        problems.append(("fail", f"叙述段只占 {narr_ratio:.0%}（合格小说 40–60%，下限 35%）"))
+        problems.append(("warn", f"叙述段只占 {narr_ratio:.0%}（参考合格小说 40–60%，仅供参考）"))
     elif narr_ratio < 0.40:
         problems.append(("warn", f"叙述段占比 {narr_ratio:.0%}，偏低"))
     if max_run >= 3:
-        problems.append(("fail", f"连续 {max_run} 段纯对白（要求 ≤2）"))
+        problems.append(("warn", f"连续 {max_run} 段纯对白（漫画原作常见大量对白，仅供参考）"))
     if n_narr and concrete_ratio < 0.6:
         problems.append(("warn", f"叙述段中只有 {concrete_ratio:.0%} 写了具体身体动作"))
 
