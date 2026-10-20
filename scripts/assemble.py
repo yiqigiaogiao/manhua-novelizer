@@ -183,8 +183,16 @@ def run(work: str, out: str, title: str = "漫画小说化",
         only: list[str] | None = None) -> dict:
     items = collect(work)
     if only:
-        wanted = {str(x).strip() for x in only}
-        items = [it for it in items if str(it["meta"].get("话", it["key"])).strip() in wanted]
+        # 话号在 meta 里可能是 int/str/float（6 / "6" / 6.0），统一按整数比较
+        def as_int(v):
+            try:
+                return int(float(str(v).strip()))
+            except (TypeError, ValueError):
+                return None
+
+        wanted = {as_int(x) for x in only} - {None}
+        items = [it for it in items
+                 if as_int(it["meta"].get("话", it["key"])) in wanted]
     if not items:
         return {"error": f"no draft.md under {work}"}
     formats = formats or ["md", "docx", "epub", "mobi"]

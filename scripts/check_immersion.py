@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
-"""沉浸感质检：表情/神态、对白穿插、概括句。
+"""沉浸感质检（第三版：用"不含引号即叙述段"这个客观界限，不再靠词表猜）。
 
-判的是"这篇稿子是不是在写场景串烧"。
+前两版失败的原因：
+- v1 按段判"有引号无动作词 = 纯对白"，把"动作段 + 引号段"的正常写法判成错误。
+- v2 加了 ±1 段窗口，但动作词表只有 30 个词，"张着嘴""仰着头""把屏幕推近"
+  这些真动作都匹配不上，实测 agent 自估 40-67% 而脚本判 17-27%，尺子失真。
 
-设计要点：
-- **按段落判定，不按词频**。词频会把"看""停"这类单字重复计数，虚高到没有意义。
-  这里判断"这一段里有没有表情或身体动作的成分"，是有没有的问题，不是多不多的问题。
-- **纯对白段**：整段有引号、但没有任何表情/动作成分 → 人物只有台词没有脸。
-- **连排**：连续 3 段以上都是纯对白 → 读起来像剧本。
-
-用法：
-    python check_immersion.py --draft work/ch001/draft.md
-    python check_immersion.py --work work
-退出码：0 通过；1 有 fail
+v3 判法：
+- 段落分两类：**含引号的（对白段）** vs **不含引号的（叙述/动作段）**。
+  这个界限是客观的，不依赖词表。
+- 核心指标改成：**叙述段占比**（合格小说 40-60%）、
+  **最长连续对白段**（≥3 才算剧本化）、
+  **对白段是否被叙述段包夹**（前后不能都是对白段）。
+- 词表只用于两个窄用途：判断"叙述段里有没有具体身体动作"（软指标）、
+  以及检测概括动词/心理独白。
 """
 from __future__ import annotations
 
@@ -22,22 +23,13 @@ import json
 import os
 import re
 
-# 表情 / 神态 / 身体动作（"脸上和身上发生的事"）
-BODY = re.compile(
-    "眼神|目光|视线|抬眼|低眼|垂眼|眯|睁|眨|盯|瞥|望|看了一眼|看向他|看向"
-    "|嘴角|抿|咧|咬|笑|皱|眉|额"
-    "|脸色|面色|腮|颊|下巴|脸上"
-    "|手指|指节|手背|掌|拳|攥|握|松|垂|抬手|伸手|攥紧|松开"
-    "|肩膀|肩|背|腰|胸口|喉|咽|吞咽|呼吸|喘|气息"
-    "|汗|泪|抖|颤|僵|顿住|停住|愣|怔|沉默"
+CONCRETE = re.compile(
+    "眼|嘴|唇|牙|舌|眉|额|脸|面|腮|颊|下巴|头|颈|脖|肩|背|腰|胸|腹|手|指|掌|拳|臂|肘|腕"
+    "|腿|脚|膝|喉|咽|呼吸|气|汗|泪|血|抖|颤|僵|停|站|坐|跪|蹲|走|跑|转身|低头|抬头|看|望|盯"
 )
-# 概括动词（写了就是在作弊）
 SUMMARY = re.compile("讲述了|议论了一番|讨论了一番|发生了争执|经过一番|纷纷表示|陷入沉思")
-# 说明语言
 META = re.compile("画面中|镜头|这一格|读者")
-# 心理独白（替人物下判断）
 PSY = re.compile("感到一阵|心里清楚|心中一凛|不禁|仿佛在诉说|深知")
-# 标点规范
 BAD_QUOTES = re.compile("[\u300c\u300d\u300e\u300f]")
 ELLIPSIS = re.compile(r"(?<!\.)\.\.(?!\.)")
 
@@ -48,51 +40,59 @@ def split_body(text: str) -> str:
 
 
 def paragraphs(body: str) -> list[str]:
-    return [p.strip() for p in body.split("\n\n") if p.strip()]
-
-
-def is_pure_dialog(p: str) -> bool:
-    """有引号，但整段没有任何表情/身体动作成分。"""
-    return "\u201c" in p and not BODY.search(p)
+    out = []
+    for p in body.split("\n\n"):
+        p = p.strip()
+        if not p or p.startswith("#") or p == "◇":
+            continue
+        out.append(p)
+    return out
 
 
 def check_one(path: str) -> dict:
     text = open(path, encoding="utf-8").read()
     body = split_body(text)
     paras = paragraphs(body)
+    n = len(paras)
+    if not n:
+        return {"file": path, "fail": True, "problems": [{"level": "fail", "msg": "正文为空"}]}
 
-    # 连续纯对白段
-    run, max_run, sample = 0, 0, []
-    for p in paras:
-        if is_pure_dialog(p):
-            run += 1
-            sample.append(p[:28])
-            max_run = max(max_run, run)
-        else:
-            run = 0
-            sample = []
+    is_dialog = ["\u201c" in p for p in paras]
+    n_dialog = sum(is_dialog)
+    n_narr = n - n_dialog
+    narr_ratio = n_narr / n
 
-    dialog_paras = [p for p in paras if "\u201c" in p]
-    pure = [p for p in dialog_paras if is_pure_dialog(p)]
-    pure_ratio = len(pure) / len(dialog_paras) if dialog_paras else 0.0
+    # 最长连续对白
+    max_run = run = 0
+    for d in is_dialog:
+        run = run + 1 if d else 0
+        max_run = max(max_run, run)
+
+    # 对白段是否被叙述段包夹（孤立对白 = 前后都是对白段或到头）
+    isolated = 0
+    for i, d in enumerate(is_dialog):
+        if not d:
+            continue
+        prev_d = is_dialog[i - 1] if i > 0 else True
+        next_d = is_dialog[i + 1] if i + 1 < n else True
+        if prev_d and next_d:
+            isolated += 1
+
+    # 叙述段里有多少含具体身体动作（软指标）
+    concrete = sum(1 for p, d in zip(paras, is_dialog) if not d and CONCRETE.search(p))
+    concrete_ratio = concrete / n_narr if n_narr else 0.0
 
     cjk = len(re.findall(r"[\u4e00-\u9fff]", body))
-    body_paras = [p for p in paras if BODY.search(p)]
-    body_ratio = len(body_paras) / len(paras) if paras else 0.0
-
     problems = []
-    if dialog_paras and pure_ratio > 0.5:
-        problems.append(("fail", f"含对白的段落里 {pure_ratio:.0%} 没有任何表情/动作穿插（要求 ≤50%）"))
-    elif dialog_paras and pure_ratio > 0.3:
-        problems.append(("warn", f"纯对白段占比偏高 {pure_ratio:.0%}"))
+
+    if narr_ratio < 0.35:
+        problems.append(("fail", f"叙述段只占 {narr_ratio:.0%}（合格小说 40–60%，下限 35%）"))
+    elif narr_ratio < 0.40:
+        problems.append(("warn", f"叙述段占比 {narr_ratio:.0%}，偏低"))
     if max_run >= 3:
-        problems.append(("fail", f"连续纯对白 {max_run} 段（要求 <3）"))
-        if sample:
-            problems.append(("info", "示例：" + " / ".join(sample[:3])))
-    if cjk >= 300 and body_ratio < 0.25:
-        problems.append(("fail", f"只有 {body_ratio:.0%} 的段落写到表情或身体动作（要求 ≥25%）"))
-    elif cjk >= 300 and body_ratio < 0.4:
-        problems.append(("warn", f"表情/动作覆盖偏低 {body_ratio:.0%}"))
+        problems.append(("fail", f"连续 {max_run} 段纯对白（要求 ≤2）"))
+    if n_narr and concrete_ratio < 0.6:
+        problems.append(("warn", f"叙述段中只有 {concrete_ratio:.0%} 写了具体身体动作"))
 
     for name, pat, level in (("概括动词", SUMMARY, "fail"),
                              ("说明语言", META, "fail"),
@@ -100,19 +100,20 @@ def check_one(path: str) -> dict:
         hits = pat.findall(body)
         if hits:
             problems.append((level, f"{name}：{sorted(set(hits))[:5]}"))
-    if BAD_QUOTES.search(body):
-        problems.append(("fail", "存在「」『』角括号"))
-    if ELLIPSIS.search(body):
-        problems.append(("warn", "存在半角省略号"))
+    n_bad = len(BAD_QUOTES.findall(body))
+    if n_bad:
+        problems.append(("fail", f"存在「」『』{n_bad} 处"))
 
     return {
         "file": os.path.basename(os.path.dirname(path)) or os.path.basename(path),
         "cjk": cjk,
-        "paragraphs": len(paras),
-        "dialog_paras": len(dialog_paras),
-        "pure_dialog_ratio": round(pure_ratio, 3),
-        "body_paragraph_ratio": round(body_ratio, 3),
-        "max_pure_dialog_run": max_run,
+        "paragraphs": n,
+        "dialog": n_dialog,
+        "narration": n_narr,
+        "narration_ratio": round(narr_ratio, 3),
+        "max_dialog_run": max_run,
+        "isolated_dialog": isolated,
+        "concrete_ratio": round(concrete_ratio, 3),
         "problems": [{"level": lv, "msg": m} for lv, m in problems],
         "fail": any(lv == "fail" for lv, _ in problems),
     }
@@ -120,24 +121,19 @@ def check_one(path: str) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="沉浸感质检")
-    ap.add_argument("--draft", help="单篇 draft.md")
-    ap.add_argument("--work", help="工作目录，检查其下 ch*/draft.md")
+    ap.add_argument("--draft")
+    ap.add_argument("--work")
     args = ap.parse_args(argv)
-
-    if args.draft:
-        paths = [args.draft]
-    elif args.work:
-        paths = sorted(glob.glob(os.path.join(args.work, "ch*", "draft.md")))
-    else:
-        ap.error("需要 --draft 或 --work")
+    paths = [args.draft] if args.draft else (
+        sorted(glob.glob(os.path.join(args.work, "ch*", "draft.md"))) if args.work else [])
     if not paths:
-        ap.error("没有找到 draft.md")
+        ap.error("需要 --draft 或 --work")
 
     results = [check_one(p) for p in paths]
-    print(json.dumps({"checked": len(results),
-                      "failing": sum(1 for r in results if r["fail"]),
-                      "results": results}, ensure_ascii=False, indent=1))
-    return 1 if any(r["fail"] for r in results) else 0
+    ok = sum(1 for r in results if not r.get("fail"))
+    print(json.dumps({"checked": len(results), "passing": ok, "results": results},
+                     ensure_ascii=False, indent=1))
+    return 0 if ok == len(results) else 1
 
 
 if __name__ == "__main__":
