@@ -547,3 +547,28 @@ python scripts/clean_pages.py --work . --keep ch001/pages        # 留某一话
 - 4–8 路并发；再高容易触发限流，且不好排查。
 - 断点判据：产物文件存在即完成。重跑先 `if exists: skip`。
 - `progress.csv` 记 `chapter,stage,status,updated`，中断后从缺口继续。
+
+### S3 转录必须按"可自愈"的方式编排
+
+**故障现象（实测）**：一个 agent 读 20+ 页、最后一次性写 `page_script.json`，
+报告"Page 20 read. Proceeding to final page 21."后失联，**已读的 20 页全部丢失**。
+一轮派 15 个 agent，零产出。根因不是读图能力，是**攒盘**：
+所有结果押在最后一次写入上，那次写入没发生就等于什么都没做。
+
+**修正设计（四条）**：
+
+| 原则 | 做法 |
+|---|---|
+| 小段 | 每 **3 页**一段任务 |
+| 单页文件 | 每读一页立刻写 `ps_pNNNN.json`，**绝不攒到最后** |
+| 以文件为验收 | 重跑扫磁盘已存在的页，只补缺失的；agent 的"已完成"汇报不作为依据 |
+| 双层重试 | agent 内重试 ≤3 次；外层按 `missing` 再跑一轮补位 |
+
+```bash
+python scripts/transcribe_progress.py --work work --ch ch001   # 缺哪几页
+```
+
+编排骨架与实测数据见 `SKILL.md` 的「S3 转录编排」一节。
+**不要在提示词里要求 agent"最后汇总"**——汇总由脚本做，提示词只管单页落盘。
+
+---

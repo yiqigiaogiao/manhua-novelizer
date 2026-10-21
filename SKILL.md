@@ -212,8 +212,75 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
    ├─ draft.md               S5
    ├─ qa.json                S6
    ├─ verify.json            S6.7（图对文核对 + S6.75 的 revisions）
+   ├─ ps_p0001.json…          S3 单页转录（自愈的最小验收单元）
    └─ digest.md              可选：分场摘要，供 S5 翻阅
 ```
+
+---
+
+## S3 转录编排：agent 挂掉必须能自动补位（硬要求）
+
+> "一个子 agent 挂掉，后续会自动补上"——这不是可选的健壮性，是流程的**基本形态**。
+
+**实测教训**：整段式转录（一个 agent 读 20+ 页、最后一次性写一个 `page_script.json`）
+命中率极低。agent 报告"Page 20 read. Proceeding to final page 21."然后失联——
+**已读的 20 页全部丢失，因为要等尾声才落盘**。一轮派 15 个 agent，全部无产出。
+
+### 四条设计原则
+
+| 原则 | 做法 | 理由 |
+|---|---|---|
+| **小段** | 每 3 页一段任务 | 粒度小到 agent 在上下文耗尽前就能完成并落盘 |
+| **单页文件** | 每读一页立刻写 `ps_pNNNN.json` | 中断不丢已读页——自愈的前提 |
+| **以文件为验收** | 重跑扫磁盘已存在的页，只跑缺失的 | agent 说"写好了"不可信，文件在才算完成 |
+| **双层重试** | agent 内重试 + 外层按缺失页补跑 | 一段失败不必重跑整话 |
+
+### 编排脚本骨架（workflow 工具）
+
+```javascript
+// 3 页一段；批内并发 4、批间串行（全并发会把 agent 拖垮）
+const segs = [];
+for (let s = 1; s <= TOTAL; s += 3) segs.push({ start: s, end: Math.min(s + 2, TOTAL) });
+
+async function one(seg) {
+  const prompt = buildPrompt(seg);   // 必须明确列出：读哪几页 + 每页写哪个文件
+  for (let att = 1; att <= 3; att++) {
+    const r = await agent(prompt, {
+      label: `${CH} p${seg.start}-${seg.end} try${att}`,
+      schema: { type: 'object',
+                properties: { written: { type: 'array', items: { type: 'integer' } } },
+                required: ['written'], additionalProperties: false }
+    });
+    if (r && Array.isArray(r.written) && r.written.length > 0)
+      return { seg, ok: true, written: r.written, att };
+  }
+  return { seg, ok: false, written: [], att: 3 };
+}
+
+let out = [], BATCH = 4;
+for (let i = 0; i < segs.length; i += BATCH)
+  out = out.concat(await parallel(segs.slice(i, i + BATCH).map(s => () => one(s))));
+
+const missing = [];
+for (let p = 1; p <= TOTAL; p++)
+  if (out.flatMap(o => o.written).indexOf(p) < 0) missing.push(p);
+return { pages_written: TOTAL - missing.length, missing };  // missing 立刻再跑一轮补位
+```
+
+### 验收与合并
+
+```bash
+# 看写到哪了、缺哪几页（自愈的输入）
+python scripts/transcribe_progress.py --work work --ch ch001
+
+# ps_pNNNN.json × N  ->  chNNN/page_script.json（S4 的输入）
+```
+
+**不要在 agent 提示词里让它"最后汇总成一个文件"**——汇总会诱导攒盘，
+把自愈的前提毁掉。汇总交给合并脚本。
+
+实测效果（《极度恐慌》ch001，22 页）：8 段里 7 段一次成功，缺 p4–6；
+补位跑一轮即补齐，共 19+3=22 页，`change`/`story_role` 字段均正常落盘。
 
 ## 常见坑
 
