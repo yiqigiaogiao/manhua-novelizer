@@ -32,6 +32,7 @@ import os
 import re
 import sys
 
+# 确保同目录模块可被 import（被当模块 import 时脚本目录不会自动进 sys.path）
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _shared import list_dirs  # noqa: E402
 

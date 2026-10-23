@@ -12,10 +12,14 @@ from __future__ import annotations
 import glob
 import json
 import os
+import sys
 from collections import deque
 
 import numpy as np
 from PIL import Image
+
+# 确保同目录模块可被 import（被当模块 import 时脚本目录不会自动进 sys.path）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 MAX_SIDE = 320
 
@@ -161,12 +165,36 @@ def detect(pages_dir: str, sample: int = 6) -> dict:
     }
 
 
-def apply(work_dir: str, direction: str) -> str:
+def apply(work_dir: str, direction: str, confidence: float | None = None,
+          confirmed: bool = True) -> str:
+    """把阅读方向写进 config.json，同时落 confidence / confirmed。
+
+    为什么必须一起写
+    ----------------
+    只写 direction 的话，"检测给出但没人确认"和"人看过之后拍板"在 config 里
+    长得一模一样，下游没有任何依据拦住后者。把 `confirmed` 显式落盘，
+    `check_ready.py` 才能在"置信度低且未确认"时拒绝成书——
+    否则无人值守批量会被默认 ltr 一路蒙混。
+
+    confirmed 只在**人工覆盖**（--set）时为 True；自动检测写入时为 False。
+    """
     import _shared as config
     cfg = config.load_config(work_dir)
-    cfg.setdefault("work", {})["reading_direction"] = direction
+    work_cfg = cfg.setdefault("work", {})
+    work_cfg["reading_direction"] = direction
+    work_cfg["reading_confidence"] = confidence
+    work_cfg["reading_confirmed"] = bool(confirmed)
     config.save_config(work_dir, cfg)
     return os.path.join(work_dir, "config.json")
+
+
+def detect_and_save(work_dir: str, pages_dir: str, sample: int = 6) -> dict:
+    """检测 + 把结果（含 confidence / confirmed=False）写进 config.json。"""
+    result = detect(pages_dir, sample)
+    path = apply(work_dir, result["direction"], result.get("confidence"), confirmed=False)
+    result["saved"] = path
+    result["confirmed"] = False
+    return result
 
 
 def main(argv=None) -> int:
@@ -175,16 +203,19 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="检测/设置阅读顺序（ltr/rtl/ttb）")
     ap.add_argument("--pages", default=None, help="页图目录")
     ap.add_argument("--work", default="work", help="写入 config.json 的工作目录")
-    ap.add_argument("--set", dest="set_dir", choices=["ltr", "rtl", "ttb"], default=None)
+    ap.add_argument("--set", dest="set_dir", choices=["ltr", "rtl", "ttb"], default=None,
+                    help="人工确认并写入（会标记 reading_confirmed=true）")
     ap.add_argument("--sample", type=int, default=6)
     args = ap.parse_args(argv)
     if args.set_dir:
-        path = apply(args.work, args.set_dir)
-        print(json.dumps({"direction": args.set_dir, "saved": path}, ensure_ascii=False, indent=1))
+        path = apply(args.work, args.set_dir, confirmed=True)
+        print(json.dumps({"direction": args.set_dir, "confirmed": True, "saved": path},
+                         ensure_ascii=False, indent=1))
         return 0
     if not args.pages:
         ap.error("需要 --pages 或 --set")
-    print(json.dumps(detect(args.pages, args.sample), ensure_ascii=False, indent=1))
+    print(json.dumps(detect_and_save(args.work, args.pages, args.sample),
+                     ensure_ascii=False, indent=1))
     return 0
 
 

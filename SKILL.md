@@ -24,6 +24,7 @@ license: MIT
 
 ```bash
 pip install pymupdf pillow          # 必需；docx 导出另需 python-docx
+pip install zhconv                  # 推荐：繁体原稿的台词覆盖不做繁简归一会失真
 python scripts/build_manifest.py --help
 ```
 
@@ -46,16 +47,16 @@ python scripts/build_manifest.py --help
 | S3 | 页脚本：逐页识读成 JSON（**必经，不抽样**）。**每格必须记 `story_role`/`change`/`knows_after`/`beat`** —— 这是剧情语义，没有它下游必然写成场景串烧 | 视觉 agent + `prompts/01-page-script.md` | `page_script.json` |
 | S3-alt | **廉价转录**：本地 OCR 出文字，文本模型整理（零视觉 token） | `python scripts/ocr_pages.py` + `prompts/01b-page-script-from-ocr.md` | `ocr.json` → `page_script.json` |
 | S4 | 章脉络：合页成场、裁说话人、写 state；**只做索引，不产出句子**；beats 写因果链，每场带 `hook_in`/`hook_out`；**`reading` 剧情理解块必填**（S5 骨架 + S6.7 核对基准） | agent + `prompts/02-chapter-outline.md` | `outline.json` |
-| S5 | 写正文：先读 `outline.reading` 建立剧情理解，再逐场照 `change` 写 | agent + `prompts/03-prose.md` | `draft.md` |
-| S6 | 质检：**台词覆盖必须 100%**（`--min-coverage` 默认 1.0）+ 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
+| S5 | 写正文：先读 `outline.reading` 建立剧情理解，再逐场照 `change` 写。**按场景分段落盘**（`draft_seg_NNN.md`），写完一段落一盘，合并再拼回 `draft.md` | agent + `prompts/03-prose.md` + `python scripts/draft_progress.py --work . --ch ch001 --merge` | `draft.md` |
+| S6 | 质检：**台词覆盖必须 100%**（`--min-coverage` 默认 1.0）+ **转录完整性**（`page_script.json` 对白格 vs `outline.quotes`）+ 事件完整性 + 忠实度 | `python scripts/check_prose.py` + agent + `prompts/04-qa.md` | `qa.json` |
 | **S6.1** | **统一引号**：`「」→“”`（在 S6.2 之前，否则 check_immersion 对「」稿给假绿灯） | `python scripts/normalize_quotes.py --work .` | 原地改写 draft |
 | **S6.2** | **沉浸质检**：表情/动作密度、纯对白连排、概括句 | `python scripts/check_immersion.py --work .` | 退出码 0 才继续 |
 | **S6.7** | **原图复检**：拿还没删的页图逐场核对正文——抓"描述与画面不一致"和"原作画面表达力丢失" | agent + `prompts/07-image-verify.md` | `verify.json` |
 | **S6.75** | **按复检结论改写**：只改 `verify.json` 点到的问题，不做无关重写 | agent + `prompts/075-revise-from-verify.md` | 改 `draft.md` + 追加 `revisions` |
 | **S6.7b** | **复检闸门**：没 verify.json、没读原图、major/minor 未修订 → 拦住 | `python scripts/check_verify.py --work .` | 退出码 0 才继续 |
-| S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
+| S6.5 | 全本一致性审计（年龄/建模/死亡/时间线/称谓），对照 spine。**输入不完整时直接标 `WARN/ERROR: 输入不完整，结果不可信` 并非零退出**（`--lenient` 放行）；正文出现「回忆/往事/当年」但 `state` 没标 `flashback` 主动提示 | `python scripts/check_consistency.py` + `prompts/06-consistency-audit.md` | `audit/consistency.md` |
 | **S6.8** | **覆盖闸门**：源里几话，就必须有几话写完、几话出书 | `python scripts/check_coverage.py --map chapter-map.csv --work . --books 出书目录` | 退出码 0 才继续 |
-| **S6.9** | **成书闸门**：所有话写完、过复检、静置 N 分钟、质检未过期、覆盖完整 | `python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv` | 退出码 0 才继续 |
+| **S6.9** | **成书闸门**：所有话写完、过复检、静置 N 分钟、质检未过期、覆盖完整、**阅读方向已人工确认**（置信度 ≥ 0.6 或 `confirmed: true`） | `python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv` | 退出码 0 才继续 |
 | S7 | 成书：md/docx/epub/mobi + PNG 封面 | `python scripts/assemble.py --chapter-map chapter-map.csv` | `book.*` |
 | **S8** | **全本合并**：把各卷合成一部完整小说（含跨卷对账） | `python scripts/merge_books.py --books 出书目录 --out 全本 --formats md docx epub` | `全本.*` |
 | **S9** | **清理页图**：**确认完整后才下这个指令**。默认只报不删；`--confirm` 才真删 | `python scripts/clean_pages.py --work . --dry-run` → `--confirm` | 释放磁盘 |
@@ -164,10 +165,13 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 
 ## 输出与清理
 
-- 成书格式：`md` / `docx` / `epub` / `mobi`（MOBI 由内置写出器生成，不依赖 calibre）+ `cover.png`。
+- 成书格式：`md` / `docx` / `epub` / `mobi`（MOBI 由内置 PalmDOC 写出器生成，不依赖 calibre）+ `cover.png`。
+  **本地阅读器（Kindle 设备 / KOReader / Calibre）可读取**；内置写出器不做压缩，体积偏大，
+  **未经 Kindle 邮件推送验证**——推送请先用 calibre 转一遍：`ebook-convert book.epub book.mobi`。
 - 页图支持 `jpg`（默认）与 `png`：`python scripts/prep_pages.py --format png`。
 - **页图不自动删。** 成书后页图仍在 `chNNN/pages/`——它们是 S6.7 复检的依据，
-  也是你日后回头核对的唯一证据。确认全书无误后，再显式下清理指令：
+  也是你日后回头核对的唯一证据。确认全书无误后，再显式下清理指令
+  （**这是唯一的删除入口；`assemble.py` 没有 `--cleanup`，也不会删页图**）：
 
   ```bash
   python scripts/clean_pages.py --work . --dry-run            # 先看会删多少、省多少
@@ -175,7 +179,10 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
   python scripts/clean_pages.py --work . --confirm --after-verify  # 只删过了复检的章
   python scripts/clean_pages.py --work . --confirm --keep ch001/pages  # 留某一话
   ```
-- **中间页图会占几百 MB 到几 GB**：`python scripts/assemble.py --cleanup` 或 `python scripts/clean_pages.py --work .` 一键删除；
+- 封面标题卡按平台探测中文字体（`MHN_COVER_FONT` 环境变量可覆盖，见 README「封面字体」）；
+  一个都没找到就只出底色封面，不会崩。
+- **中间页图会占几百 MB 到几 GB**，确认全书无误后由人显式删：
+  `python scripts/clean_pages.py --work . --confirm`（**唯一删除入口，`assemble.py` 不删页图**）；
   `--keep ch001/pages` 可保留某一话，`--dry-run` 先看会删多少。
 
 ## 质量闸门
@@ -183,12 +190,19 @@ python scripts/style_config.py --action confirm    # 用户确认后标记
 | 检查 | 合格线 | 谁做 |
 |---|---|---|
 | 台词覆盖（原文对白逐字落地） | **100%**（`--min-coverage` 默认 1.0） | `python scripts/check_prose.py` |
+| **转录完整性**（`page_script.json` 的对白格 vs `outline.quotes`） | **不缺记** | `python scripts/check_prose.py` |
 | 事件完整性（beats 是否落地） | 无关键遗漏 | agent |
 | 忠实度（抽 3 页对照原图） | 无编造 | agent |
 | **话级覆盖（源里几话都写了、都出书了）** | **无缺失、无重复** | `python scripts/check_coverage.py` |
 | 一致性（年龄/建模/死亡/时间线） | 0 error | `python scripts/check_consistency.py` |
+| **阅读方向已人工确认**（置信度 ≥ 0.6 或 `confirmed: true`） | **已确认** | `detect_order.py` + `check_ready.py` |
 
 **没有字数线，没有禁词线。**
+
+> **繁体原稿必须装 `zhconv`**（`pip install zhconv`）。不装时 `check_prose.py` 的
+> `normalize()` 只剔非中英数字符、不做繁简归一，台版/港版原稿的台词覆盖会失真——
+> 要么漏判（繁体对白在简体正文里找不到），要么靠 `difflib` 0.8 兜底误放/误杀。
+> `merge_books.py` 那边早就强调繁简归一，这道最关键的闸门不能例外。
 
 ## 目录约定
 
@@ -281,6 +295,37 @@ python scripts/transcribe_progress.py --work work --ch ch001
 
 实测效果（《极度恐慌》ch001，22 页）：8 段里 7 段一次成功，缺 p4–6；
 补位跑一轮即补齐，共 19+3=22 页，`change`/`story_role` 字段均正常落盘。
+
+---
+
+## S5 正文写作：同样要能自愈（别让半截稿骗过 check_ready）
+
+S3 早就改成"小段 + 单页落盘 + 文件验收 + 双层重试"了，但 S5 写正文曾经
+是**一话一个 draft.md**：agent 写一半挂掉，磁盘上就留半截稿，而半截稿和
+完成稿长得一模一样——`check_ready.py` 的静置检查只看 mtime，分不出
+"写完了"还是"写到一半断了"。几百话批量时，S5 是比 S3 更大的失败面。
+
+照搬 S3 的模式，`scripts/draft_progress.py` 提供支撑：
+
+```bash
+# 看写到哪了、缺哪几段（自愈的输入）
+python scripts/draft_progress.py --work work --ch ch001
+
+# 所有段齐了，才合并成 draft.md（原子写：临时文件 -> os.replace，不会留半截稿）
+python scripts/draft_progress.py --work work --ch ch001 --merge
+```
+
+编排约定：
+
+- **按场景分段**：`outline.json` 的 `scenes[]` 每场一段，文件 `draft_seg_001.md`、
+  `draft_seg_002.md`…… 与 `scenes` 下标一一对应。
+- **写完一段就落盘**：中断只丢当前这一段，前面全在。空文件不算完成。
+- **以文件为验收**：重跑扫磁盘已存在的段，只跑缺失的。
+- **合并再拼 `draft.md`**：段落不齐 `merge` 直接拒绝（不会把半截稿当完成稿）；
+  原子写保证 `draft.md` 要么完整要么不存在。`draft.md` 比所有段都新时 `merge`
+  默认跳过，保护人工修改，要强制覆盖加 `--force`。
+- **让写作 agent 逐段写 `draft_seg_NNN.md`，不要让它最后汇总成一个 `draft.md`**——
+  汇总会诱导攒盘，把自愈前提毁掉。合并交给 `draft_progress.py --merge`。
 
 ## 常见坑
 

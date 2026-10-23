@@ -1,12 +1,23 @@
 {
-  "language": "zh",
-  "pov": "third-limited",
-  "tense": "past",
-  "length_per_page": [120, 180],
-  "dialect": "keep",
-  "banned_words": ["画面", "镜头", "分镜", "这一格", "格子", "读者", "对话框", "旁白框"],
-  "output": ["md", "docx"],
-  "title_format": "第X回 {title}",
-  "scene_break": "◇",
-  "reading_direction": "ltr"
+  "version": 2,
+  "work": {
+    "language": "zh",
+    "reading_direction": "ltr",
+    "reading_confidence": 0.0,
+    "reading_confirmed": false,
+    "nonstory_regex": "预告|公告|请假|通知|复刊|小结|获奖|目录|版权|后记",
+    "strip_suffix": ""
+  },
+  "adaptation": {
+    "pov": "third-limited",
+    "tense": "past",
+    "dialect": "keep",
+    "forbid_meta_language": true,
+    "style_config": "style.json"
+  },
+  "output": {
+    "formats": ["md", "docx", "epub", "mobi"],
+    "cover": true,
+    "page_format": "jpg"
+  }
 }

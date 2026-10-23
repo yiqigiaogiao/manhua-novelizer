@@ -8,6 +8,11 @@ import os
 import re
 import sys
 
+# 确保同目录模块可被 import：以脚本方式运行时 Python 会自动把脚本目录
+# 放进 sys.path[0]，但被当模块 import（测试、python -m、merge_books 复用）
+# 时不会，这里显式补上，彻底消除"只能在 scripts/ 里跑"的隐性前提。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import epub_writer as epub
 import mobi_writer as mobi
 
@@ -135,11 +140,44 @@ def _esc(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def cover_font_candidates() -> list[str]:
+    """跨平台中文字体候选，按优先级排列。
+
+    以前硬编码 `C:\\Windows\\Fonts\\msyh.ttc` / `simhei.ttf`：macOS/Linux 上
+    一个都找不到，标题卡退化成纯色块（甚至画不出字）。
+    现在先看环境变量，再按平台顺序探测；都没有就只出底色图。
+    """
+    return [
+        os.environ.get("MHN_COVER_FONT", ""),                      # 用户自定义优先
+        "/System/Library/Fonts/STHeiti Light.ttc",                 # macOS
+        "/System/Library/Fonts/PingFang.ttc",                      # macOS 新版
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux (Noto)
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",            # Linux (文泉驿)
+        "/usr/share/fonts/truetype/arphic/uming.ttc",              # Linux (AR PL)
+        r"C:\Windows\Fonts\msyh.ttc",                              # Windows (微软雅黑)
+        r"C:\Windows\Fonts\simhei.ttf",                            # Windows (黑体)
+        r"C:\Windows\Fonts\simsun.ttc",                            # Windows (宋体)
+    ]
+
+
+def find_cover_font(size: int = 64):
+    """找到第一个可用中文字体，返回 ImageFont；一个都没有返回 None。"""
+    from PIL import ImageFont
+    for path in cover_font_candidates():
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return None
+
+
 def make_cover(work: str, out_path: str, title: str) -> str | None:
     """优先用第一话首页做封面；没有页图时画一张纯色标题卡。"""
     candidates = sorted(glob.glob(os.path.join(work, "ch001", "pages", "p0001.*")))
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
     except ImportError:
         return None
     if candidates:
@@ -149,15 +187,11 @@ def make_cover(work: str, out_path: str, title: str) -> str | None:
         return out_path
     img = Image.new("RGB", (900, 1200), (28, 30, 34))
     draw = ImageDraw.Draw(img)
-    font = None
-    for path in (r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"):
-        if os.path.isfile(path):
-            try:
-                font = ImageFont.truetype(path, 64)
-                break
-            except OSError:
-                continue
-    draw.text((80, 520), title, fill=(240, 236, 228), font=font)
+    font = find_cover_font(64)
+    if font is not None:
+        draw.text((80, 520), title, fill=(240, 236, 228), font=font)
+    # 找不到任何 CJK 字体时只出底色封面：不崩、不画方块字。
+    # 需要标题就设 MHN_COVER_FONT 指向一个中文字体（见 README「封面字体」）。
     img.save(out_path, "PNG")
     return out_path
 
@@ -250,6 +284,12 @@ def run(work: str, out: str, title: str = "漫画小说化",
         cover_path = make_cover(work, os.path.join(out, "cover.png"), title)
         if cover_path:
             result["files"]["cover"] = cover_path
+            # 只有"画标题卡"这条路才需要字体；用页图做封面时不需要
+            has_pages = bool(sorted(glob.glob(os.path.join(work, "ch001", "pages", "p0001.*"))))
+            if not has_pages and find_cover_font(64) is None:
+                result["cover_warning"] = (
+                    "没有找到任何中文字体，封面只出了底色、没有标题文字；"
+                    "设 MHN_COVER_FONT 指向一个中文字体后重跑（见 README「封面字体」）")
 
     if "md" in formats:
         path = os.path.join(out, "book.md")

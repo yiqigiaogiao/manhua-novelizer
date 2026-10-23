@@ -26,7 +26,8 @@ DEFAULT_CONFIG = {
         "page_format": "jpg",
         # 页图是 S6.7 原图复检的事实源，成书后**不**自动删。
         # 彻底核对完成后由人显式执行 `clean_pages.py --work . --confirm`。
-        "cleanup_after_build": False,
+        # （这里**没有** `cleanup_after_build`：清理只有 clean_pages 一个入口，
+        #   不在 config 里留"成书即删"的开关，避免误删证据。）
     },
 }
 

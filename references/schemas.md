@@ -168,8 +168,7 @@ v0.3 起**不再有字数与禁词检查**，只保留忠实度。
   "output": {
     "formats": ["md", "docx", "epub", "mobi"],
     "cover": true,
-    "page_format": "jpg",
-    "cleanup_after_build": true
+    "page_format": "jpg"
   }
 }
 ```
@@ -183,8 +182,11 @@ v0.3 起**不再有字数与禁词检查**，只保留忠实度。
 | `output.formats` | `md` `docx` `epub` `mobi` | 成书格式 |
 | `output.page_format` | `jpg` / `png` | 中间页图格式 |
 | `work.reading_direction` | `ltr` / `rtl` | 老式港漫用 `rtl` |
+| `work.reading_confidence` | 0–1 | `detect_order.py` 写入的置信度 |
+| `work.reading_confirmed` | bool | 人工确认过才为 `true`；未确认时 `check_ready.py` 拒绝成书 |
 
-**已移除**：`length_per_page`（字数上下限）、`banned_words`（禁用词表）。
+**已移除**：`length_per_page`（字数上下限）、`banned_words`（禁用词表）、
+`output.cleanup_after_build`（死字段，从没被读过；清理只走 `clean_pages.py --confirm`）。
 
 ---
 

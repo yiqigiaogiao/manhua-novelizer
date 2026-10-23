@@ -10,8 +10,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import time
 from typing import Any
+
+# 确保同目录模块可被 import（被当模块 import 时脚本目录不会自动进 sys.path）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 DIMENSIONS = [
     ("rhythm", "叙事节奏"),

@@ -258,7 +258,27 @@ python scripts/detect_order.py --set rtl --work work                    # 人工
 
 提示词：`prompts/03-prose.md`。
 
----
+### 分段落盘，和 S3 一样能自愈
+
+曾经 S5 是"一话一个 draft.md"：agent 写一半挂掉，磁盘上就留半截稿，而半截稿
+和完成稿长得一模一样——`check_ready.py` 的静置检查只看 mtime，分不出"写完了"
+还是"写到一半断了"。几百话批量时，S5 是比 S3 更大的失败面。
+
+做法：写作 agent **逐场**写 `draft_seg_NNN.md`（与 `outline.json` 的 `scenes[]`
+下标一一对应），写完一段落一盘；所有段齐了，再合并成 `draft.md`：
+
+```bash
+# 看写到哪了、缺哪几段（自愈输入）
+python scripts/draft_progress.py --work work --ch ch001
+
+# 段齐了才合并成 draft.md（原子写，不会留半截稿）；段落不齐直接拒绝
+python scripts/draft_progress.py --work work --ch ch001 --merge
+```
+
+- 段文件只放正文，不放 front matter / 一级标题——头由合并步骤统一加。
+- 空文件不算完成（agent 建了文件却没内容也算缺）。
+- `merge` 默认跳过"比所有段都新"的 `draft.md`（保护人工修改），要覆盖加 `--force`。
+- **不要让写作 agent 最后汇总成一个 draft.md**——汇总诱导攒盘，毁掉自愈前提。
 
 ## S6 · 质检
 
@@ -267,6 +287,7 @@ python scripts/detect_order.py --set rtl --work work                    # 人工
 ```bash
 python scripts/check_prose.py --draft ch001/draft.md --outline ch001/outline.json --bible bible.md
 # 退出码 0 才合格；--min-coverage 默认 1.0
+# page_script.json 默认取 outline.json 同目录；也可 --page-script 显式指定
 ```
 
 红线（已写进 `prompts/03-prose.md`）：
@@ -277,6 +298,18 @@ python scripts/check_prose.py --draft ch001/draft.md --outline ch001/outline.jso
 - **允许**：在两句对白之间插入表情、动作、停顿。**加东西可以，减台词不行。**
 
 判据补充：标点型引语（「……」「？」）没有可核对内容，不进分母（见 commit `3177b40`）。（只看忠实）
+
+### 两道容易被"绿灯"骗过的闸
+
+1. **繁简归一**：`normalize()` 现在装了 `zhconv` 会把繁体原稿（「話」「來」）归一成简体
+   再比对。没装 `zhconv` 就退化成只剔标点——台版/港版原稿的台词覆盖会失真
+   （繁体对白在简体正文里找不到，靠 difflib 0.8 兜底误放或误杀）。`pip install zhconv`。
+
+2. **转录完整性**：台词覆盖率只对 `outline.quotes` 负责。上游转录（S3）漏记一句对白，
+   outline 里就没有这一条，覆盖率照样 100%——QA 永远发现不了。所以 `check_prose.py`
+   新增 `transcription_integrity`：拿 `page_script.json` 里**所有对白格**
+   （speech/dialogue/thought 等）和 `outline.quotes` 的条数对账。outline 比转录
+   少 → 直接判 `pass=false`（退出码非零）。`page_script.json` 缺失时自动跳过（advisory）。
 
 **输入**：`draft.md`、`outline.json`、`bible.md`、页图（抽 3 页）。
 **输出**：`qa.json`。
@@ -330,6 +363,26 @@ agent 再按 `prompts/06-consistency-audit.md` 做六类语义判定：**年龄/
 时间线、称谓/关系、能力/设定**。它负责机器判不了的部分——比如"换了皮甲"是剧情合理还是画错。
 
 处置：`error` 必修；`warn` 逐条判定（改正文 / 补 bible / 标合理变化）；`info` 记入 bible。
+
+### 输入完整性：别让"一路绿灯"变成空检查
+
+审计的死亡/年龄误报，根因常是 `state` 该填没填——脚本只在结论上给错误信号，
+以前从不报错"根本没数据"。现在 `check_consistency.py` 多了一道输入校验：
+
+- `bible.md` 给了但为空/不存在 → 外观基准与姓名登记两项失明；
+- `state` 缺失率超过 50% → 时间/年龄/死亡三项基本没数据。
+
+命中就标 **`ERROR: 输入不完整，结果不可信`** 并以非零退出（`--lenient` 才降级成提示）。
+另外：正文出现「回忆/往事/当年/想起」等闪回措辞、但 `state` 没标 `flashback`，
+会主动 warn 提示——这正是时间倒退被误报的根因，早喊比晚判强。
+
+```bash
+python scripts/check_consistency.py --work . --bible bible.md \
+       --out audit/consistency.md --json audit/consistency.json
+
+# 确认这是有意为之（脚本故意没数据）再放行：
+python scripts/check_consistency.py --work . --lenient
+```
 
 ## S6.2 · 沉浸质检（防"场景串烧"）
 
@@ -456,9 +509,18 @@ python scripts/check_ready.py --work . --check-qa --chapter-map chapter-map.csv
 1. 每一话都有 `draft.md`；
 2. `draft.md` 最后修改距今 ≥ `--quiet-minutes`（默认 10）——还在写就别急着拼；
 3. `--check-qa` 时 `qa.json` 存在且不早于 `draft.md`——防止用旧质检结果；
-4. `--chapter-map` 时，源清单里的每一话都有 `draft.md`（覆盖不完整直接拒绝）。
+4. `--chapter-map` 时，源清单里的每一话都有 `draft.md`（覆盖不完整直接拒绝）；
+5. **阅读方向已人工确认**：`config.json` 的 `work.reading_confirmed=true`，
+   或 `reading_confidence ≥ 0.6`。置信度 < 0.6 且没确认 → 拒绝成书
+   （无人值守批量时，默认 `ltr` 会一路蒙混，顺序错了整本台词归属都错）。
 
 `--require` 可以追加必备文件，例如 `--require draft.md outline.json page_script.json`。
+`--skip-direction-check` 可显式绕过第 5 条（不推荐，仅调试用）。
+
+> 阅读方向怎么来的：`detect_order.py --pages ... --work work` 做自动检测，
+> 写入 `reading_direction` + `reading_confidence` + `reading_confirmed=false`；
+> 人工看完前 2–3 页确认后 `detect_order.py --set rtl --work work`（或 ltr/ttb），
+> 才把 `reading_confirmed` 写成 true。
 
 ## S7 · 成书与清理
 
@@ -471,7 +533,7 @@ python scripts/normalize_quotes.py --work .           # 改「」→“”、『
 
 ```bash
 python scripts/assemble.py --work . --out build --title "书名" \
-    --chapter-map chapter-map.csv --cleanup
+    --chapter-map chapter-map.csv
 ```
 
 - 读所有 `ch*/draft.md` 的 front matter，按话号排序。
@@ -479,8 +541,9 @@ python scripts/assemble.py --work . --out build --title "书名" \
 - 生成 `cover.png`（优先用第一话首页，没有页图时画标题卡）。
 - `stats.csv`：每话字数；`index.csv`：每话场景与人物。
 - `--chapter-map` 给了就**先过覆盖闸门**，覆盖不全拒绝成书（比出完再发现少话便宜得多）。
-- **不再自动删页图**：删图是显式人工指令（见 S9），页图是 S6.7 复检的事实源。
-- `--cleanup` 或 `python scripts/clean_pages.py --work .` 删除中间页图（jpg/png），`--keep` 可保留某一话。
+- **不删页图。** `assemble.py` 没有 `--cleanup`，删图是显式人工指令（见 S9），
+  页图是 S6.7 复检的事实源。
+- 删图唯一入口：`python scripts/clean_pages.py --work . --confirm`（`--keep` 可保留某一话）。
 
 ---
 
@@ -535,7 +598,8 @@ python scripts/clean_pages.py --work . --keep ch001/pages        # 留某一话
 
 - **没 `--confirm` = 只报不删**（dry-run 与不带 confirm 的调用等价）。
 - `--after-verify` 读每话 `verify.json`：没过复检的章**不删**，留着还能补核。
-- `assemble.py` 成书成功后**不再自动清**（`output.cleanup_after_build` 默认已改 `false`）。
+- `assemble.py` 成书成功后**不再自动清**——它压根没有 `--cleanup` 参数，
+  清理只走 `clean_pages.py --confirm` 这一个入口。
 - 删掉的只有 `*.jpg/*.png`；正文、`page_script.json`、`outline.json`、
   `verify.json`、`qa.json` 全部保留——它们才是小说的档案。
 
