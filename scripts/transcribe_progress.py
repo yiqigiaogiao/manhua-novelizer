@@ -30,12 +30,34 @@ SEG_SIZE = 3          # 每段页数：3 页一段，兼顾吞吐与落盘可靠
 BATCH = 4             # 批内并发数
 
 
-def pages_dir_status(folder: pathlib.Path) -> tuple[int, list[int], list[int]]:
-    """返回 (页图总数, 已转录页, 缺失页)。"""
+def real_page_count(folder: pathlib.Path) -> int:
+    """真实页数：以 prep_pages 写下的 pages.json 为准。
+
+    **不能数 pages 目录下的图片张数**——长条页会被切成多片
+    （p0012.jpg -> p0012_t1/t2/t3），图片数虚高，补位 agent
+    于是被派去读根本不存在的 p0018。
+    实测《极度恐慌》：图片 3,263 张 vs 真实 3,195 页，18 个话有切片。
+    """
+    pj = folder / "pages" / "pages.json"
+    if pj.is_file():
+        try:
+            m = json.loads(pj.read_text(encoding="utf-8-sig"))
+            pages = m.get("pages", [])
+            if pages:
+                return len(pages)
+        except (OSError, json.JSONDecodeError):
+            pass
     pages = folder / "pages"
-    imgs = sorted(p for p in pages.iterdir()
-                  if p.suffix.lower() in (".jpg", ".png")) if pages.exists() else []
-    total = len(imgs)
+    if not pages.exists():
+        return 0
+    # 没有 pages.json 时退回数图片，但排除切片文件
+    return len([p for p in pages.iterdir()
+                if p.suffix.lower() in (".jpg", ".png") and "_t" not in p.stem])
+
+
+def pages_dir_status(folder: pathlib.Path) -> tuple[int, list[int], list[int]]:
+    """返回 (真实页数, 已转录页, 缺失页)。"""
+    total = real_page_count(folder)
     have = set()
     for f in folder.glob("ps_p*.json"):
         try:

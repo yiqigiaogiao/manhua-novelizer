@@ -77,8 +77,8 @@ def list_dirs(path: str, prefix: str = "", suffix: str = "") -> list[str]:
 
     不要用 glob/fnmatch：路径里只要带方括号（中文下载目录常见
     「【完】」「[扫描]」这类），fnmatch 会把方括号当字符类，
-    结果一条都匹配不到。实测 `glob.glob(path + '/*')` 在
-    `…\【完】[…]\小説\` 下返回空列表，而 os.scandir 正常。
+    结果一条都匹配不到。实测 glob.glob 在带方括号的路径下返回空列表，
+    而 os.scandir 正常。
     """
     out = []
     try:
